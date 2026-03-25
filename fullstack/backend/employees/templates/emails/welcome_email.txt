@@ -1,0 +1,24 @@
+Welcome to BlackRoth Software Solutions Pvt. Ltd.
+
+Dear {{ employee_name }},
+
+We are excited to have you on board.
+
+Your login credentials to access our systems are as follows:
+
+Login to {{ login_url }}
+Username: {{ email }}
+Password: {{ password }}
+
+Note: This email was sent to your personal email ({{ personal_email }})
+
+Note: You can change your password later, after login.
+
+Please note that your password is case sensitive, and you will need to change it every 90 days for security purposes.
+
+If you have any issues logging in, please don't hesitate to reach out to our HR department.
+
+Best regards,
+HR Department
+BlackRoth Software Solutions Pvt. Ltd.
+{{ company_address }}

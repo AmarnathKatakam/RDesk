@@ -1,0 +1,16 @@
+Dear {{ employee_name }},
+
+I hope this message finds you well.
+
+Please find attached your Relieving Letter issued by {{ company_name }}, confirming the acceptance of your resignation and formal release from your duties.
+
+We sincerely appreciate your contributions during your tenure with us and wish you continued success in your future endeavors.
+
+For any queries related to your full and final settlement, please feel free to reach out to our HR department at {{ hr_email }}.
+
+Thank you once again for your professionalism and dedication.
+
+Warm regards,
+{{ hr_name }}
+{{ hr_title }}
+{{ company_name }}

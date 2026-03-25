@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relieving Letter - BlackRoth Software Solutions</title>
+    <style>
+        body {
+            font-family: 'Droid Serif', serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: white;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            background-color: #2563eb;
+            color: white;
+            padding: 30px 20px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        .content {
+            padding: 30px;
+        }
+        .greeting {
+            font-size: 16px;
+            margin-bottom: 20px;
+        }
+        .message {
+            background-color: #f8f9fa;
+            border-left: 4px solid #2563eb;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .footer {
+            background-color: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            font-size: 12px;
+            color: #666;
+            border-top: 1px solid #e5e7eb;
+        }
+        .company-name {
+            font-weight: bold;
+            color: #2563eb;
+            margin-bottom: 5px;
+        }
+        .company-address {
+            color: #666;
+            font-size: 11px;
+        }
+        .attachment-note {
+            background-color: #fef3c7;
+            border: 1px solid #f59e0b;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+            color: #92400e;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>Relieving Letter</h1>
+        </div>
+
+        <!-- Main Content -->
+        <div class="content">
+            <div class="greeting">
+                <p>Dear {{ employee_name }},</p>
+                <p>I hope this message finds you well.</p>
+            </div>
+
+            <!-- Message -->
+            <div class="message">
+                <p>Please find attached your Relieving Letter issued by {{ company_name }}, confirming the acceptance of your resignation and formal release from your duties.</p>
+                <p>We sincerely appreciate your contributions during your tenure with us and wish you continued success in your future endeavors.</p>
+            </div>
+
+            <!-- Attachment Note -->
+            <div class="attachment-note">
+                <p><strong>📎 Attachment:</strong> Your relieving letter PDF is attached to this email.</p>
+            </div>
+
+            <!-- Support Information -->
+            <p>For any queries related to your full and final settlement, please feel free to reach out to our HR department at {{ hr_email }}.</p>
+
+            <p>Thank you once again for your professionalism and dedication.</p>
+
+            <p>Warm regards,<br>
+            {{ hr_name }}<br>
+            {{ hr_title }}<br>
+            {{ company_name }}</p>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <div class="company-name">{{ company_name }}</div>
+            <div class="company-address">{{ company_address }}</div>
+        </div>
+    </div>
+</body>
+</html>

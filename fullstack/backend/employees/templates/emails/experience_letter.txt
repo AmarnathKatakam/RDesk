@@ -1,0 +1,16 @@
+Dear {{ employee_name }},
+
+I hope this message finds you well.
+
+Please find attached your Experience Letter issued by {{ company_name }}, documenting your employment tenure and contributions during your time with us.
+
+This letter serves as an official record of your professional experience and can be used for future employment opportunities or other official purposes.
+
+If you require any additional information or have questions regarding this document, please feel free to contact our HR department at {{ hr_email }}.
+
+Thank you for your valuable contributions to {{ company_name }}.
+
+Warm regards,
+{{ hr_name }}
+{{ hr_title }}
+{{ company_name }}
