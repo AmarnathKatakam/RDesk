@@ -6,7 +6,7 @@ import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 
-type RoleMode = 'admin' | 'employee' | 'either';
+type RoleMode = 'admin' | 'employee' | 'ceo' | 'either';
 
 interface ProtectedRouteProps {
   role: RoleMode;
@@ -18,7 +18,8 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ role }) => {
   const userRole = (localStorage.getItem('userRole') || '').toLowerCase();
   const token = localStorage.getItem('authToken');
   const storedUser = localStorage.getItem('user');
-  const hasAdminRole = userRole === 'admin' || userRole === 'hr' || userRole === 'ceo';
+  const hasAdminRole = userRole === 'admin' || userRole === 'hr';
+  const hasCEORole = userRole === 'ceo';
   const hasEmployeeRole = userRole === 'employee';
   const hasSession = Boolean(isAuthenticated || token || storedUser);
 
@@ -30,20 +31,14 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ role }) => {
     );
   }
 
-  const isAdmin = hasSession && (userType === 'admin' || hasAdminRole);
+  const isAdmin    = hasSession && (userType === 'admin'    || hasAdminRole);
+  const isCEO      = hasSession && (userType === 'ceo'      || hasCEORole);
   const isEmployee = hasSession && (userType === 'employee' || hasEmployeeRole);
 
-  if (role === 'admin' && !isAdmin) {
-    return <Navigate to="/login" replace />;
-  }
-
-  if (role === 'employee' && !isEmployee) {
-    return <Navigate to="/login" replace />;
-  }
-
-  if (role === 'either' && !isAdmin && !isEmployee) {
-    return <Navigate to="/login" replace />;
-  }
+  if (role === 'admin'    && !isAdmin)    return <Navigate to="/login" replace />;
+  if (role === 'ceo'      && !isCEO)      return <Navigate to="/login" replace />;
+  if (role === 'employee' && !isEmployee) return <Navigate to="/login" replace />;
+  if (role === 'either'   && !isAdmin && !isCEO && !isEmployee) return <Navigate to="/login" replace />;
 
   return <Outlet />;
 };

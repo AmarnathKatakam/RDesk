@@ -7,7 +7,7 @@ import { CalendarDays, Clock3, MapPin, Timer, LogIn, LogOut } from 'lucide-react
 import { attendanceAPI } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import StatCard from '@/components/StatCard';
-import { usePunchInFlow } from '@/hooks/usePunchInFlow';
+import { usePunchInFlow, usePunchOutFlow } from '@/hooks/usePunchInFlow';
 
 type AttendanceStatus =
   | 'PRESENT'
@@ -115,6 +115,19 @@ const EmployeeAttendancePage: React.FC = () => {
   }, [month, year]);
 
   const { beginPunchIn, dialog: punchInDialog, submitting: punchInSubmitting } = usePunchInFlow({
+    employeeId,
+    onSuccess: async (message) => {
+      setError('');
+      setSuccess(message);
+      await loadAttendance();
+    },
+    onError: (message) => {
+      setSuccess('');
+      setError(message);
+    },
+  });
+
+  const { beginPunchOut, dialog: punchOutDialog, submitting: punchOutSubmitting } = usePunchOutFlow({
     employeeId,
     onSuccess: async (message) => {
       setError('');
@@ -241,12 +254,12 @@ const EmployeeAttendancePage: React.FC = () => {
               {punchInSubmitting ? 'Marking In...' : 'Swipe In'}
             </Button>
             <Button
-              onClick={() => void runPunch('OUT')}
-              disabled={!canPunchOut || actionLoading !== null || punchInSubmitting}
+              onClick={() => void beginPunchOut()}
+              disabled={!canPunchOut || actionLoading !== null || punchInSubmitting || punchOutSubmitting}
               className="bg-slate-800 hover:bg-slate-900"
             >
               <MapPin className="mr-2 h-4 w-4" />
-              {actionLoading === 'OUT' ? 'Marking Out...' : 'Swipe Out'}
+              {punchOutSubmitting ? 'Marking Out...' : 'Swipe Out'}
             </Button>
           </div>
         </div>
@@ -352,6 +365,7 @@ const EmployeeAttendancePage: React.FC = () => {
 
       {loading ? <div className="text-sm text-slate-500">Loading attendance...</div> : null}
       {punchInDialog}
+      {punchOutDialog}
     </div>
   );
 };

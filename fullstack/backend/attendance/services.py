@@ -147,6 +147,7 @@ def snapshot_record(record: AttendanceRecord | None) -> dict[str, Any]:
         return {}
     return {
         "status": record.status,
+        "work_type": record.work_type,
         "punch_in_time": record.punch_in_time.isoformat() if record.punch_in_time else None,
         "punch_out_time": record.punch_out_time.isoformat() if record.punch_out_time else None,
         "working_hours": str(record.working_hours),
@@ -220,10 +221,14 @@ def has_approved_leave(employee: Employee, target_date: date) -> bool:
 
 
 def is_holiday(target_date: date, location: OfficeLocation | None = None) -> bool:
-    holiday_qs = Holiday.objects.filter(holiday_date=target_date)
-    if location:
-        holiday_qs = holiday_qs.filter(models.Q(location__isnull=True) | models.Q(location=location))
-    return holiday_qs.exists()
+    # Use new HolidayCalendar/Holiday hierarchy — only NATIONAL holidays count
+    return Holiday.objects.filter(
+        date=target_date,
+        holiday_type='NATIONAL',
+        is_active=True,
+        calendar__is_active=True,
+        calendar__year=target_date.year,
+    ).exists()
 
 
 def is_week_off(target_date: date, policy: AttendancePolicy | None) -> bool:
@@ -242,7 +247,20 @@ def validate_location(
     office_location: OfficeLocation | None,
     latitude: Decimal | None,
     longitude: Decimal | None,
+    work_type: str = AttendanceRecord.WORK_TYPE_WFO,
 ) -> tuple[bool, float | None]:
+    """
+    Validate GPS location based on work type and policy.
+
+    WFO  → enforce geofence if policy.enforce_gps is True
+    WFH  → skip geofence; capture GPS if provided but never block
+    ONSITE → skip geofence; capture GPS if provided but never block
+    """
+    # WFH and ONSITE never require office geofence validation
+    if work_type in (AttendanceRecord.WORK_TYPE_WFH, AttendanceRecord.WORK_TYPE_ONSITE):
+        return False, None
+
+    # WFO path — original logic
     if not policy:
         return False, None
 
@@ -252,7 +270,7 @@ def validate_location(
     if not office_location:
         raise AttendanceServiceError("No office location configured for attendance validation.", status_code=400)
     if latitude is None or longitude is None:
-        raise AttendanceServiceError("GPS coordinates are required for attendance.", status_code=400)
+        raise AttendanceServiceError("GPS coordinates are required for WFO attendance.", status_code=400)
 
     distance = haversine_distance_meters(
         float(latitude),
@@ -262,10 +280,38 @@ def validate_location(
     )
     if distance > float(office_location.allowed_radius_meters):
         raise AttendanceServiceError(
-            f"Attendance rejected. You are outside the allowed office radius ({office_location.allowed_radius_meters} m).",
+            f"WFO attendance rejected. You are {round(distance)}m away from the office "
+            f"(allowed radius: {office_location.allowed_radius_meters}m).",
             status_code=403,
         )
     return True, distance
+
+
+def validate_work_type(
+    work_type: str,
+    policy: AttendancePolicy | None,
+) -> None:
+    """
+    Validate that the requested work type is a known value and is allowed by policy.
+    """
+    valid_types = {c[0] for c in AttendanceRecord.WORK_TYPE_CHOICES}
+    if work_type not in valid_types:
+        raise AttendanceServiceError(
+            f"Invalid work type '{work_type}'. Must be one of: {', '.join(sorted(valid_types))}.",
+            status_code=400,
+        )
+
+    if not policy:
+        return  # No policy = no restriction
+
+    allowed = policy.allowed_work_types
+    if allowed:  # Empty list means all types allowed
+        if work_type not in allowed:
+            raise AttendanceServiceError(
+                f"Work type '{work_type}' is not permitted by your attendance policy. "
+                f"Allowed: {', '.join(allowed)}.",
+                status_code=403,
+            )
 
 
 def evaluate_status_for_punch_in(shift, punched_time: time) -> str:
@@ -313,6 +359,7 @@ def punch_in(
     latitude: Decimal | None = None,
     longitude: Decimal | None = None,
     notes: str | None = None,
+    work_type: str = AttendanceRecord.WORK_TYPE_WFO,
 ) -> tuple[AttendanceRecord, dict[str, Any]]:
     today = timezone.localdate()
     now = timezone.now()
@@ -337,9 +384,19 @@ def punch_in(
         )
 
     policy = get_active_policy(assignment)
+
+    # Validate work type against policy restrictions
+    validate_work_type(work_type, policy)
+
     office_location = get_active_office_location(assignment, policy)
-    location_verified, distance = validate_location(policy, office_location, latitude, longitude)
-    status = evaluate_status_for_punch_in(assignment.shift, local_now.time())
+    location_verified, distance = validate_location(policy, office_location, latitude, longitude, work_type)
+    attendance_status = evaluate_status_for_punch_in(assignment.shift, local_now.time())
+
+    work_type_labels = {
+        AttendanceRecord.WORK_TYPE_WFO:    "Work From Office",
+        AttendanceRecord.WORK_TYPE_WFH:    "Work From Home",
+        AttendanceRecord.WORK_TYPE_ONSITE: "On-site / Client Location",
+    }
 
     with transaction.atomic():
         record, _ = AttendanceRecord.objects.select_for_update().get_or_create(
@@ -349,6 +406,7 @@ def punch_in(
                 "shift": assignment.shift,
                 "office_location": office_location,
                 "status": AttendanceRecord.STATUS_ABSENT,
+                "work_type": work_type,
             },
         )
 
@@ -363,7 +421,8 @@ def punch_in(
         record.punch_in_latitude = latitude
         record.punch_in_longitude = longitude
         record.location_verified = location_verified
-        record.status = status
+        record.status = attendance_status
+        record.work_type = work_type
         record.notes = notes or record.notes
         record.marked_by_system = False
         record.save()
@@ -375,10 +434,14 @@ def punch_in(
             action=AttendanceAuditLog.ACTION_PUNCH_IN,
             before_data=before_data,
             after_data=snapshot_record(record),
-            reason="Employee punched in.",
+            reason=f"Employee punched in ({work_type_labels.get(work_type, work_type)}).",
         )
 
-    return record, {"distance_meters": round(distance, 2) if distance is not None else None}
+    return record, {
+        "distance_meters": round(distance, 2) if distance is not None else None,
+        "work_type": work_type,
+        "work_type_label": work_type_labels.get(work_type, work_type),
+    }
 
 
 def punch_out(
@@ -409,7 +472,6 @@ def punch_out(
 
     policy = get_active_policy(assignment)
     office_location = get_active_office_location(assignment, policy)
-    location_verified, distance = validate_location(policy, office_location, latitude, longitude)
 
     with transaction.atomic():
         try:
@@ -421,6 +483,10 @@ def punch_out(
             raise AttendanceServiceError("Punch out already recorded for today.", status_code=409)
         if not record.punch_in_time:
             raise AttendanceServiceError("Please punch in first.", status_code=400)
+
+        # Use the work_type from the punch-in record so WFH/ONSITE skip geofence
+        work_type = record.work_type or AttendanceRecord.WORK_TYPE_WFO
+        location_verified, distance = validate_location(policy, office_location, latitude, longitude, work_type)
 
         before_data = snapshot_record(record)
 

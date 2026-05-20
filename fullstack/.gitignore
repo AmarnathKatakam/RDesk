@@ -1,0 +1,93 @@
+# ─── Python / Django ──────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+*.manifest
+*.spec
+
+# Virtual environments
+venv/
+env/
+.venv/
+.env/
+ENV/
+
+# Django
+backend/.env
+backend/staticfiles/
+backend/media/payslips/
+backend/logs/
+*.log
+db.sqlite3
+
+# Migrations (keep __init__.py, ignore compiled cache)
+backend/**/migrations/__pycache__/
+backend/**/__pycache__/
+
+# ─── Node / React / Vite ──────────────────────────────────────────────────────
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+
+# Vite cache
+frontend/node_modules/.vite/
+frontend/node_modules/.vite-temp/
+
+# Build artifacts
+*.tsbuildinfo
+
+# ─── Root level ───────────────────────────────────────────────────────────────
+node_modules/
+package-lock.json
+
+# ─── IDE / Editor ─────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ─── OS ───────────────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Desktop.ini
+
+# ─── Secrets & Credentials ────────────────────────────────────────────────────
+*.env
+.env.*
+!.env.example
+secrets.json
+credentials.json
+
+# ─── Media uploads (employee documents, payslips) ─────────────────────────────
+backend/media/employee_documents/
+backend/media/payslips/
+backend/media/employee_photos/
+
+# ─── Test / Coverage ──────────────────────────────────────────────────────────
+.coverage
+htmlcov/
+.pytest_cache/
+coverage.xml
+*.cover
+
+# ─── Celery ───────────────────────────────────────────────────────────────────
+celerybeat-schedule
+celerybeat.pid
+
+# ─── Redis dump ───────────────────────────────────────────────────────────────
+dump.rdb

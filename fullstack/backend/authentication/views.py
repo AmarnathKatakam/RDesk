@@ -112,20 +112,17 @@ def login_view(request):
                 'message': 'Account is inactive'
             }, status=status.HTTP_400_BAD_REQUEST)
 
-    # Employee login fallback
-    try:
-        employee = Employee.objects.get(
-            Q(employee_id__iexact=username) | Q(email__iexact=username)
-        )
-    except Employee.DoesNotExist:
+    # Employee login fallback — filter active employees only, avoid MultipleObjectsReturned
+    employee = Employee.objects.filter(
+        Q(employee_id__iexact=username) | Q(email__iexact=username),
+        is_active=True,
+    ).order_by('-id').first()
+
+    if not employee:
         return Response({
             'success': False,
             'message': 'Invalid credentials'
         }, status=status.HTTP_401_UNAUTHORIZED)
-    except Employee.MultipleObjectsReturned:
-        employee = Employee.objects.filter(
-            Q(employee_id__iexact=username) | Q(email__iexact=username)
-        ).order_by('id').first()
 
     if not _verify_employee_password(employee, password):
         return Response({

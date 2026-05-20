@@ -95,6 +95,11 @@ class AttendancePolicy(models.Model):
     )
     enforce_gps = models.BooleanField(default=True)
     allow_remote_punch = models.BooleanField(default=False)
+    allowed_work_types = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='List of allowed work types e.g. ["WFO", "WFH", "ONSITE"]. Empty = all allowed.',
+    )
     auto_mark_absent = models.BooleanField(default=True)
     min_half_day_hours = models.DecimalField(max_digits=4, decimal_places=2, default=Decimal("4.00"))
     full_day_hours = models.DecimalField(max_digits=4, decimal_places=2, default=Decimal("8.00"))
@@ -119,7 +124,104 @@ class AttendancePolicy(models.Model):
         return self.name
 
 
+class HolidayCalendar(models.Model):
+    """
+    Named holiday calendar for a given year, optionally scoped to an Indian state.
+    Supports company-wide (state=None) and state-specific calendars.
+    Only NATIONAL holidays in active calendars reduce working days for payroll.
+    """
+    INDIAN_STATE_CHOICES = [
+        ('AP', 'Andhra Pradesh'), ('AR', 'Arunachal Pradesh'), ('AS', 'Assam'),
+        ('BR', 'Bihar'), ('CG', 'Chhattisgarh'), ('GA', 'Goa'), ('GJ', 'Gujarat'),
+        ('HR', 'Haryana'), ('HP', 'Himachal Pradesh'), ('JH', 'Jharkhand'),
+        ('KA', 'Karnataka'), ('KL', 'Kerala'), ('MP', 'Madhya Pradesh'),
+        ('MH', 'Maharashtra'), ('MN', 'Manipur'), ('ML', 'Meghalaya'),
+        ('MZ', 'Mizoram'), ('NL', 'Nagaland'), ('OD', 'Odisha'), ('PB', 'Punjab'),
+        ('RJ', 'Rajasthan'), ('SK', 'Sikkim'), ('TN', 'Tamil Nadu'),
+        ('TG', 'Telangana'), ('TR', 'Tripura'), ('UP', 'Uttar Pradesh'),
+        ('UK', 'Uttarakhand'), ('WB', 'West Bengal'), ('DL', 'Delhi'),
+        ('OTHER', 'Other / Union Territory'),
+    ]
+
+    name = models.CharField(max_length=120)
+    year = models.PositiveSmallIntegerField(
+        help_text='Calendar year (e.g. 2026). All holidays must fall within this year.'
+    )
+    state = models.CharField(
+        max_length=10, choices=INDIAN_STATE_CHOICES, null=True, blank=True,
+        help_text='Indian state code. Null = company-wide calendar (applies to all states).'
+    )
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(
+        'authentication.AdminUser',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='created_holiday_calendars',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'holiday_calendars'
+        ordering = ['-year', 'state']
+        # Only one active calendar per (year, state) combination
+        unique_together = [('year', 'state', 'is_active')]
+
+    def __str__(self):
+        state_label = self.state or 'All States'
+        return f"{self.name} ({self.year} — {state_label})"
+
+
 class Holiday(models.Model):
+    """
+    Individual holiday entry within a HolidayCalendar.
+    holiday_type:
+      NATIONAL   — mandatory non-working day (reduces working days for payroll)
+      OPTIONAL   — employee may choose to take; informational only
+      RESTRICTED — restricted holiday; informational only
+    """
+    HOLIDAY_TYPE_CHOICES = [
+        ('NATIONAL', 'National Holiday'),
+        ('OPTIONAL', 'Optional Holiday'),
+        ('RESTRICTED', 'Restricted Holiday'),
+    ]
+
+    calendar = models.ForeignKey(
+        HolidayCalendar,
+        on_delete=models.CASCADE,
+        related_name='holidays',
+    )
+    date = models.DateField()
+    name = models.CharField(max_length=120)
+    holiday_type = models.CharField(
+        max_length=20, choices=HOLIDAY_TYPE_CHOICES, default='NATIONAL',
+    )
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'holiday_calendar_entries'
+        ordering = ['date']
+        unique_together = [('calendar', 'date')]
+
+    def clean(self):
+        if self.date and self.calendar_id:
+            if self.date.year != self.calendar.year:
+                raise ValidationError(
+                    f"Holiday date {self.date} does not fall within calendar year {self.calendar.year}."
+                )
+
+    def __str__(self):
+        return f"{self.name} ({self.date}) [{self.holiday_type}]"
+
+
+# ── Legacy Holiday model (kept for backward compatibility during migration) ───
+class LegacyHoliday(models.Model):
+    """
+    Original flat Holiday model. Preserved during migration to HolidayCalendar hierarchy.
+    Will be removed after migration 0004 completes data transfer.
+    """
     name = models.CharField(max_length=120)
     holiday_date = models.DateField(unique=True)
     is_optional = models.BooleanField(default=False)
@@ -128,7 +230,7 @@ class Holiday(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="holidays",
+        related_name="legacy_holidays",
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -136,6 +238,7 @@ class Holiday(models.Model):
     class Meta:
         db_table = "attendance_holidays"
         ordering = ["holiday_date"]
+        managed = False  # table managed by migration, not Django auto-create
 
     def __str__(self):
         return f"{self.name} ({self.holiday_date})"
@@ -216,6 +319,16 @@ class EmployeeShiftAssignment(models.Model):
 
 
 class AttendanceRecord(models.Model):
+    # ── Work type constants ──────────────────────────────────────────────────
+    WORK_TYPE_WFO    = "WFO"
+    WORK_TYPE_WFH    = "WFH"
+    WORK_TYPE_ONSITE = "ONSITE"
+    WORK_TYPE_CHOICES = [
+        (WORK_TYPE_WFO,    "Work From Office"),
+        (WORK_TYPE_WFH,    "Work From Home"),
+        (WORK_TYPE_ONSITE, "On-site / Client Location"),
+    ]
+
     STATUS_PRESENT = "PRESENT"
     STATUS_LATE = "LATE"
     STATUS_HALF_DAY = "HALF_DAY"
@@ -262,6 +375,12 @@ class AttendanceRecord(models.Model):
     punch_out_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     location_verified = models.BooleanField(default=False)
     punch_out_location_verified = models.BooleanField(default=False)
+    work_type = models.CharField(
+        max_length=10,
+        choices=WORK_TYPE_CHOICES,
+        default=WORK_TYPE_WFO,
+        help_text="Work mode selected at punch-in: WFO, WFH, or ONSITE",
+    )
     working_hours = models.DecimalField(max_digits=6, decimal_places=2, default=Decimal("0.00"))
     overtime_hours = models.DecimalField(max_digits=6, decimal_places=2, default=Decimal("0.00"))
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ABSENT)

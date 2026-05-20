@@ -17,30 +17,24 @@ const MENU: NavItem[] = [
   {
     label: 'Main',
     items: [
-      { label: 'Analytics Hub',      path: '/admin/dashboard'  },
-      { label: 'Organisation Chart', path: '/admin/directory'  },
+      { label: 'Analytics Hub',      path: '/admin/employees/analytics'  },
+      { label: 'Organisation Chart', path: '/admin/employees/org-chart'  },
     ],
   },
   {
     label: 'Information',
     items: [
-      { label: 'Bank / PF / ESI',    path: '/admin/documents'  },
-      { label: 'Family Details',     path: '/admin/documents'  },
-      { label: 'Passport & Visa',    path: '/admin/documents'  },
-      { label: 'Position History',   path: '/admin/employees'  },
-      { label: 'Separation',         path: '/admin/employees'  },
-      { label: 'Nomination Details', path: '/admin/documents'  },
-      { label: 'Employee Documents', path: '/admin/documents'  },
-      { label: 'Employee Salary',    path: '/admin/payroll'    },
+      { label: 'Bank / PF / ESI',    path: '/admin/employees/bank-pf-esi'    },
+      { label: 'Family Details',     path: '/admin/employees/family-details'  },
+      { label: 'Employee Documents', path: '/admin/documents'                 },
+      { label: 'Employee Salary',    path: '/admin/payroll'                   },
     ],
   },
   {
     label: 'Admin',
     items: [
-      { label: 'Generate Letter',    path: '/admin/documents'  },
-      { label: 'Excel Import',       path: '/admin/employees'  },
-      { label: 'Bulletin Board',     path: '/admin/directory'  },
-      { label: 'Mass Communication', path: '/admin/emails'     },
+      { label: 'Generate Letter',    path: '/admin/employees/generate-letter' },
+      { label: 'Mass Communication', path: '/admin/emails'                    },
     ],
   },
   {

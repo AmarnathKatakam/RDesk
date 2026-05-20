@@ -137,7 +137,9 @@ def employee_payslips_view(request):
         'pay_period_month': payslip.pay_period_month,
         'pay_period_year': payslip.pay_period_year,
         'net_pay': payslip.net_pay,
-        'pdf_path': payslip.pdf_path,
+        # Never expose raw pdf_path — employee must use the secure endpoints
+        'preview_url': f'/api/payslips/{payslip.id}/preview/',
+        'download_url': f'/api/payslips/{payslip.id}/download/',
         'generated_at': payslip.generated_at,
         'is_released': payslip.is_released,
     } for payslip in payslip_rows]
@@ -307,6 +309,17 @@ def release_payslip_view(request):
         update_payload['released_by_id'] = request.user.id
 
     released_count = unreleased.update(**update_payload)
+
+    # Audit log each released payslip
+    from payslip_generation.audit import log_payroll_action
+    for payslip in unreleased:
+        log_payroll_action(
+            action='RELEASE',
+            performed_by=request.user if getattr(request.user, 'is_authenticated', False) else None,
+            payslip=payslip,
+            notes='Released via release_payslip_view',
+        )
+
     return Response({
         'success': True,
         'message': f'{released_count} payslip(s) released successfully.',
@@ -469,7 +482,7 @@ def complete_onboarding_view(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def employee_profile_view(request):
     employee_id, error_response = _resolve_employee_id(request)
     if error_response:
@@ -508,7 +521,7 @@ def employee_profile_view(request):
 
 
 @api_view(['PUT', 'PATCH'])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 @csrf_exempt
 def update_employee_profile_view(request):
     employee_id, error_response = _resolve_employee_id(request)
@@ -596,6 +609,16 @@ def bulk_release_payslips_view(request):
         update_payload['released_by_id'] = request.user.id
 
     updated = payslip_qs.update(**update_payload)
+
+    # Audit log
+    from payslip_generation.audit import log_payroll_action
+    log_payroll_action(
+        action='BULK_RELEASE',
+        performed_by=request.user if getattr(request.user, 'is_authenticated', False) else None,
+        pay_period_month=month,
+        pay_period_year=int(year),
+        notes=f"Bulk released {updated} payslip(s) for {len(employee_ids)} employee(s).",
+    )
 
     return Response({
         'success': True,
@@ -735,14 +758,17 @@ def employee_dashboard_view(request):
 
     # Upcoming holidays (next 30 days)
     upcoming_holidays = Holiday.objects.filter(
-        holiday_date__gte=today,
-        holiday_date__lte=today + timedelta(days=30)
-    ).order_by('holiday_date')[:5]
+        date__gte=today,
+        date__lte=today + timedelta(days=30),
+        holiday_type='NATIONAL',
+        is_active=True,
+        calendar__is_active=True,
+    ).order_by('date')[:5]
 
     holidays_list = [{
         'name': h.name,
-        'date': h.holiday_date.isoformat(),
-        'is_optional': h.is_optional
+        'date': h.date.isoformat(),
+        'is_optional': h.holiday_type != 'NATIONAL'
     } for h in upcoming_holidays]
 
     # Review items (placeholder)

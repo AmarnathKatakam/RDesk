@@ -87,7 +87,9 @@ const UnifiedLogin: React.FC = () => {
         localStorage.removeItem('authToken');
       }
 
-      if (userType === 'admin') {
+      if (normalizedRole === 'ceo') {
+        navigate('/ceo/dashboard', { replace: true });
+      } else if (userType === 'admin') {
         navigate('/admin/dashboard', { replace: true });
       } else {
         navigate('/employee/dashboard', { replace: true });

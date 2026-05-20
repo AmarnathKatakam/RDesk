@@ -87,7 +87,11 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem('authToken');
       const currentPath = window.location.pathname;
-      if (currentPath !== '/login' && !currentPath.startsWith('/activate/')) {
+      const userType = localStorage.getItem('userType');
+      // Only force-redirect to login for admin users (JWT-based).
+      // Employee sessions use cookies — a 401 on a specific call doesn't mean logged out.
+      const isEmployeeRoute = currentPath.startsWith('/employee/');
+      if (!isEmployeeRoute && userType !== 'employee' && currentPath !== '/login' && !currentPath.startsWith('/activate/')) {
         window.location.href = '/login';
       }
     }
@@ -432,10 +436,169 @@ export const employeeAdminAPI = {
     api.post('/auth/employee/bulk-release-payslips/', data),
   sendRelievingLetter: (data: FormData) =>
     api.post('/employees/send-relieving-letter/', data, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+      headers: { 'Content-Type': 'multipart/form-data' },
     }),
 };
 
+// Letter Generation API
+export const letterAPI = {
+  getLetterTypes: () => api.get('/employees/letter-types/'),
+  getSignatories: () => api.get('/employees/signatories/'),
+  previewLetter: (data: { letter_type: string; employee_ids: number[]; signatory_id?: number | null; extra?: Record<string, string> }) =>
+    api.post('/employees/letters/preview/', data),
+  generateLetters: (data: { letter_type: string; employee_ids: number[]; signatory_id?: number | null }) =>
+    api.post('/employees/letters/generate/', data),
+};
+
+// Mass Communication / Announcements API
+export const announcementAPI = {
+  list: () => api.get('/employees/announcements/'),
+  send: (data: { title: string; category: string; subject: string; body: string; recipient_filter: string }) =>
+    api.post('/employees/announcements/send/', data),
+  delete: (id: number) => api.delete(`/employees/announcements/${id}/delete/`),
+};
+
+// Org Chart API
+export const orgChartAPI = {
+  getTree: () => api.get('/employees/org-chart/'),
+  assignManager: (employeeIds: number[], managerId: number | null) =>
+    api.post('/employees/org-chart/assign-manager/', { employee_ids: employeeIds, manager_id: managerId }),
+  assignTopLevel: (employeeIds: number[], isTopLevel: boolean) =>
+    api.post('/employees/org-chart/assign-top-level/', { employee_ids: employeeIds, is_top_level: isTopLevel }),
+  massTransfer: (fromManagerId: number, toManagerId: number) =>
+    api.post('/employees/org-chart/mass-transfer/', { from_manager_id: fromManagerId, to_manager_id: toManagerId }),
+  getManagerTeam: (managerId: number) => api.get(`/employees/org-chart/manager/${managerId}/team/`),
+  getManagerLeaves: (managerId: number) => api.get(`/employees/org-chart/manager/${managerId}/leaves/`),
+};
+
 export default api;
+
+// Finance API (Bank / PF / ESI / LWF)
+export const financeAPI = {
+  getEmployeeFinance: (employeeId: number) => api.get(`/finance/employee/${employeeId}/`),
+  upsertBank: (employeeId: number, data: any) => api.post(`/finance/employee/${employeeId}/bank/`, data),
+  upsertESI:  (employeeId: number, data: any) => api.post(`/finance/employee/${employeeId}/esi/`,  data),
+  upsertPF:   (employeeId: number, data: any) => api.post(`/finance/employee/${employeeId}/pf/`,   data),
+  upsertLWF:  (employeeId: number, data: any) => api.post(`/finance/employee/${employeeId}/lwf/`,  data),
+  // Bank master
+  getBanks:       ()                  => api.get('/finance/banks/'),
+  createBank:     (data: any)         => api.post('/finance/banks/', data),
+  updateBank:     (id: number, data: any) => api.put(`/finance/banks/${id}/`, data),
+  deleteBank:     (id: number)        => api.delete(`/finance/banks/${id}/`),
+  // Branch master
+  getBranches:    (bankId?: number)   => api.get('/finance/branches/', { params: bankId ? { bank_id: bankId } : {} }),
+  createBranch:   (data: any)         => api.post('/finance/branches/', data),
+  updateBranch:   (id: number, data: any) => api.put(`/finance/branches/${id}/`, data),
+  deleteBranch:   (id: number)        => api.delete(`/finance/branches/${id}/`),
+  getBranchIFSC:  (branchId: number)  => api.get(`/finance/branches/${branchId}/ifsc/`),
+};
+
+// Payroll Run API (Milestone 2)
+export const payrollRunAPI = {
+  list: () => api.get('/payroll/runs/'),
+  create: (data: { month: string; year: number; salary_type: string }) =>
+    api.post('/payroll/runs/', data),
+  getDetail: (runId: string | number) => api.get(`/payroll/runs/${runId}/`),
+  getSummary: (runId: string | number) => api.get(`/payroll/runs/${runId}/summary/`),
+  getItems: (runId: string | number) => api.get(`/payroll/runs/${runId}/items/`),
+  getItemsWithBreakdown: (runId: string | number) => api.get(`/payroll/runs/${runId}/items/breakdown/`),
+  calculate: (runId: string | number) => api.post(`/payroll/runs/${runId}/calculate/`),
+  transition: (runId: string | number, new_status: string, reason?: string) =>
+    api.post(`/payroll/runs/${runId}/transition/`, { new_status, reason: reason || '' }),
+  holdEmployee: (runId: string | number, employeeId: number, reason: string) =>
+    api.post(`/payroll/runs/${runId}/hold/`, { employee_id: employeeId, reason }),
+  releaseHold: (runId: string | number, employeeId: number) =>
+    api.post(`/payroll/runs/${runId}/release-hold/`, { employee_id: employeeId }),
+  reprocess: (runId: string | number, employeeId: number) =>
+    api.post(`/payroll/runs/${runId}/reprocess/`, { employee_id: employeeId }),
+  getValidationIssues: (params: { month: string; year: number; severity?: string; resolved?: boolean }) =>
+    api.get('/payslips/validation-issues/', { params }),
+  validateDryRun: (data: { employee_ids: number[]; pay_period: { month: string; year: number }; salary_method?: string }) =>
+    api.post('/payslips/validate/', data),
+  getVarianceReport: (params: { month: string; year: number; salary_type?: string; threshold?: number }) =>
+    api.get('/payroll/reports/variance/', { params }),
+};
+
+// Family Details API
+export const familyAPI = {
+  getChoices:     ()                        => api.get('/finance/family-members/choices/'),
+  list:           (employeeId: number)      => api.get(`/finance/employee/${employeeId}/family-members/`),
+  create:         (employeeId: number, data: any) => api.post(`/finance/employee/${employeeId}/family-members/`, data),
+  update:         (id: number, data: any)   => api.patch(`/finance/family-members/${id}/`, data),
+  delete:         (id: number)              => api.delete(`/finance/family-members/${id}/`),
+};
+
+// Payroll Config API (Milestone 3A/3B/3C)
+export const payrollConfigAPI = {
+  // Salary Components
+  getComponents: (params?: { active_only?: boolean; type?: string }) =>
+    api.get('/payroll-config/components/', { params }),
+  getComponent: (id: number) => api.get(`/payroll-config/components/${id}/`),
+  createComponent: (data: any) => api.post('/payroll-config/components/', data),
+  updateComponent: (id: number, data: any) => api.patch(`/payroll-config/components/${id}/`, data),
+
+  // Salary Templates
+  getTemplates: (params?: { active_only?: boolean }) =>
+    api.get('/payroll-config/templates/', { params }),
+  getTemplate: (id: number) => api.get(`/payroll-config/templates/${id}/`),
+  createTemplate: (data: any) => api.post('/payroll-config/templates/', data),
+  updateTemplate: (id: number, data: any) => api.patch(`/payroll-config/templates/${id}/`, data),
+  getTemplateComponents: (templateId: number) =>
+    api.get(`/payroll-config/templates/${templateId}/components/`),
+  addTemplateComponent: (templateId: number, data: any) =>
+    api.post(`/payroll-config/templates/${templateId}/components/`, data),
+  updateTemplateComponent: (templateId: number, compId: number, data: any) =>
+    api.patch(`/payroll-config/templates/${templateId}/components/${compId}/`, data),
+  removeTemplateComponent: (templateId: number, compId: number) =>
+    api.delete(`/payroll-config/templates/${templateId}/components/${compId}/`),
+
+  // Employee Salary Assignments
+  getAssignments: (params?: { active_only?: boolean; employee_id?: number }) =>
+    api.get('/payroll-config/assignments/', { params }),
+  getEmployeeSalaryHistory: (empId: number) =>
+    api.get(`/payroll-config/employees/${empId}/salary-history/`),
+  assignSalary: (empId: number, data: any) =>
+    api.post(`/payroll-config/employees/${empId}/assign-salary/`, data),
+  reviseSalary: (empId: number, data: any) =>
+    api.post(`/payroll-config/employees/${empId}/revise-salary/`, data),
+
+  // Statutory preview
+  statutoryPreview: (data: any) => api.post('/payroll-config/statutory/preview/', data),
+
+  // Payroll run item lines (3C)
+  getItemLines: (itemId: number) => api.get(`/payroll/runs/items/${itemId}/lines/`),
+  getItemsWithBreakdown: (runId: number) => api.get(`/payroll/runs/items/breakdown/?run_id=${runId}`),
+};
+
+export const payrollInputAPI = {
+  // Monthly salary data
+  upsert: (data: any) => api.post('/employees/monthly-salaries/upsert/', data),
+  listByPeriod: (params: { month: string; year: number; salary_type?: string }) =>
+    api.get('/employees/monthly-salaries/by-period/', { params }),
+  preview: (params: { employee: number; month: string; year: number; salary_type?: string }) =>
+    api.get('/employees/monthly-salaries/preview/', { params }),
+  processMonthlyInputs: (data: { month: string; year: number }) =>
+    api.post('/payroll/monthly-inputs/process/', data),
+
+  // Payroll adjustments
+  listAdjustments: (params: { month?: string; year?: number; salary_type?: string; employee?: number }) =>
+    api.get('/employees/payroll-adjustments/', { params }),
+  createAdjustment: (data: any) => api.post('/employees/payroll-adjustments/', data),
+  updateAdjustment: (id: number, data: any) => api.patch(`/employees/payroll-adjustments/${id}/`, data),
+  deleteAdjustment: (id: number) => api.delete(`/employees/payroll-adjustments/${id}/`),
+};
+
+export const payrollReportsAPI = {
+  getRegister: (params: { month: string; year: number; salary_type?: string }) =>
+    api.get('/payroll/reports/register/', { params }),
+  exportRegister: (params: { month: string; year: number; salary_type?: string }) =>
+    api.get('/payroll/reports/register/export/', { params, responseType: 'blob' }),
+  getBankTransfer: (params: { month: string; year: number; salary_type?: string }) =>
+    api.get('/payroll/reports/bank-transfer/', { params }),
+  exportBankTransfer: (params: { month: string; year: number; salary_type?: string }) =>
+    api.get('/payroll/reports/bank-transfer/export/', { params, responseType: 'blob' }),
+  getDepartmentSummary: (params: { month: string; year: number; salary_type?: string }) =>
+    api.get('/payroll/reports/department-summary/', { params }),
+  getVariance: (params: { month: string; year: number; salary_type?: string; threshold?: number }) =>
+    api.get('/payroll/reports/variance/', { params }),
+};

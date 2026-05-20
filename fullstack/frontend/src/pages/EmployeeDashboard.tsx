@@ -3,7 +3,8 @@
  * Purpose: Defines UI structure and behavior for this view/component.
  */
 import React, { useEffect, useState } from 'react';
-import { Clock, CalendarDays, Users, Award, FileText, Clock3, LogIn, LogOut as LogOutIcon, Timer } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Clock, CalendarDays, Users, Award, FileText, Clock3, LogIn, LogOut as LogOutIcon, Timer, Upload } from 'lucide-react';
 type AttendanceStatus = 'PRESENT' | 'LATE' | 'HALF_DAY' | 'ABSENT' | 'LEAVE' | 'HOLIDAY' | 'WEEK_OFF' | 'NOT_MARKED';
 
 const statusLabel: Record<AttendanceStatus, string> = {
@@ -27,7 +28,6 @@ import { attendanceAPI } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import StatCard from '@/components/StatCard';
 import { format } from 'date-fns';
-import { usePunchInFlow } from '@/hooks/usePunchInFlow';
 
 interface DashboardData {
   success: boolean;
@@ -109,6 +109,7 @@ const defaultToday: DashboardData['today'] = {
 };
 
 const EmployeeDashboardPage: React.FC = () => {
+    const navigate = useNavigate();
     // Helper for time-based greeting
     const getGreeting = () => {
       const hour = currentTime.getHours();
@@ -121,9 +122,6 @@ const EmployeeDashboardPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [actionLoading, setActionLoading] = useState<'IN' | 'OUT' | null>(null);
-  const [actionError, setActionError] = useState('');
-  const [actionSuccess, setActionSuccess] = useState('');
-  const userId = localStorage.getItem('userId') || undefined;
 
   // Live clock
   useEffect(() => {
@@ -138,6 +136,7 @@ const EmployeeDashboardPage: React.FC = () => {
     const loadData = async () => {
       try {
         setLoading(true);
+        const userId = localStorage.getItem('userId');
         if (!userId) return;
 
         const [dashboardRes, todayRes] = await Promise.all([
@@ -157,34 +156,6 @@ const EmployeeDashboardPage: React.FC = () => {
     loadData();
   }, []);
 
-  const reloadDashboard = async () => {
-    try {
-      if (!userId) return;
-      const [dashboardRes, todayRes] = await Promise.all([
-        attendanceAPI.getEmployeeDashboard(userId),
-        attendanceAPI.getToday(userId)
-      ]);
-
-      setDashboardData(dashboardRes.data);
-      setTodayAttendance(todayRes.data?.data);
-    } catch (error) {
-      console.error('Dashboard reload error:', error);
-    }
-  };
-
-  const { beginPunchIn, dialog: punchInDialog, submitting: punchInSubmitting } = usePunchInFlow({
-    employeeId: userId,
-    onSuccess: async (message) => {
-      setActionError('');
-      setActionSuccess(message);
-      await reloadDashboard();
-    },
-    onError: (message) => {
-      setActionSuccess('');
-      setActionError(message);
-    },
-  });
-
   const getLocation = (): Promise<{ latitude: number; longitude: number }> => 
     new Promise((resolve, reject) => {
       navigator.geolocation.getCurrentPosition(
@@ -200,8 +171,6 @@ const EmployeeDashboardPage: React.FC = () => {
   const handleSwipe = async (type: 'IN' | 'OUT') => {
     try {
       setActionLoading(type);
-      setActionError('');
-      setActionSuccess('');
       const coords = await getLocation();
       if (type === 'IN') {
         await attendanceAPI.punchIn({
@@ -214,11 +183,10 @@ const EmployeeDashboardPage: React.FC = () => {
           longitude: coords.longitude
         });
       }
-      setActionSuccess('Punch out recorded successfully.');
-      await reloadDashboard();
+      // Reload data
+      window.location.reload();
     } catch (error) {
       console.error('Swipe error:', error);
-      setActionError('Unable to mark attendance.');
     } finally {
       setActionLoading(null);
     }
@@ -259,14 +227,26 @@ const EmployeeDashboardPage: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
           {/* Review Card */}
           <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-6 shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-emerald-100 rounded-xl">
-                <Award className="h-5 w-5 text-emerald-600" />
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-emerald-100 rounded-xl">
+                  <Award className="h-5 w-5 text-emerald-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-900">Review</h3>
+                  <p className="text-sm text-slate-500">Pending approvals and document tasks</p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-semibold text-slate-900">Review</h3>
-                <p className="text-sm text-slate-500">Pending approvals & documents</p>
-              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => navigate('/employee/documents')}
+                className="border-slate-200 text-slate-700 hover:bg-slate-50"
+              >
+                <Upload className="mr-2 h-4 w-4" />
+                Upload Docs
+              </Button>
             </div>
             <div className="space-y-2">
               {cards.review?.map((item, idx) => (
@@ -279,6 +259,12 @@ const EmployeeDashboardPage: React.FC = () => {
                   </span>
                 </div>
               )) || <p className="text-slate-500 italic">Hurrah! You have nothing to review.</p>}
+            </div>
+            <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-medium text-slate-900">Need to share a document with HR?</p>
+              <p className="mt-1 text-sm text-slate-500">
+                Upload it here and it will appear in the admin documents dashboard for review.
+              </p>
             </div>
           </div>
 
@@ -378,35 +364,25 @@ const EmployeeDashboardPage: React.FC = () => {
 
         {/* Attendance Section */}
         <div className="bg-white rounded-3xl border border-slate-200 shadow-lg p-8">
-          {actionError ? (
-            <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-              {actionError}
-            </div>
-          ) : null}
-          {actionSuccess ? (
-            <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-              {actionSuccess}
-            </div>
-          ) : null}
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-8">
             <div>
               <h2 className="text-2xl font-bold text-slate-900 mb-1">Today's Attendance</h2>
-              <p className="text-slate-500">Swipe in/out with GPS verification. Location is used only at punch time.</p>
+              <p className="text-slate-500">Swipe in/out with GPS verification</p>
             </div>
             <div className="flex flex-wrap gap-3">
               <Button
                 size="lg"
-                onClick={() => void beginPunchIn()}
-                disabled={actionLoading === 'IN' || punchInSubmitting || !todayAttendance || todayAttendance.punch_in_time}
+                onClick={() => handleSwipe('IN')}
+                disabled={actionLoading === 'IN' || !todayAttendance || todayAttendance.punch_in_time}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg"
               >
                 <LogIn className="h-4 w-4 mr-2" />
-                {punchInSubmitting ? 'Swiping In...' : 'Swipe In'}
+                {actionLoading === 'IN' ? 'Swiping In...' : 'Swipe In'}
               </Button>
               <Button
                 size="lg"
                 onClick={() => handleSwipe('OUT')}
-                disabled={actionLoading === 'OUT' || punchInSubmitting || !todayAttendance || !todayAttendance.punch_in_time || todayAttendance.punch_out_time}
+                disabled={actionLoading === 'OUT' || !todayAttendance || !todayAttendance.punch_in_time || todayAttendance.punch_out_time}
                 className="bg-slate-800 hover:bg-slate-900 text-white shadow-lg"
               >
                 <LogOutIcon className="h-4 w-4 mr-2" />
@@ -458,8 +434,8 @@ const EmployeeDashboardPage: React.FC = () => {
             </div>
             <div className="lg:col-span-2">
               <div className="grid grid-cols-7 gap-2 text-center">
-                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day) => (
-                  <div key={day} className="font-semibold text-slate-600 py-2">{day}</div>
+                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, idx) => (
+                  <div key={`${day}-${idx}`} className="font-semibold text-slate-600 py-2">{day}</div>
                 ))}
                 {/* Calendar days would go here */}
                 {Array.from({ length: 35 }).map((_, idx) => (
@@ -472,7 +448,6 @@ const EmployeeDashboardPage: React.FC = () => {
           </div>
         </div>
       </div>
-      {punchInDialog}
     </div>
   );
 };

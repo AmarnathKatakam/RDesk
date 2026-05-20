@@ -11,7 +11,6 @@ import { Label } from './ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Alert, AlertDescription } from './ui/alert';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
-import BrandMark from './BrandMark';
 
 const Login: React.FC = () => {
   const { login, isLoading } = useAuth();
@@ -50,9 +49,15 @@ const Login: React.FC = () => {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex items-center justify-center mb-4">
-            <BrandMark />
+            <div className="h-16 w-16 rounded-full bg-primary flex items-center justify-center shadow-md">
+              <span className="text-primary-foreground font-bold text-3xl" style={{ fontFamily: '"Droid Serif", serif' }}>
+                RD
+              </span>
+            </div>
           </div>
-          <CardTitle className="sr-only">RDesk</CardTitle>
+          <CardTitle className="text-2xl font-bold text-primary" style={{ fontFamily: '"Droid Serif", serif' }}>
+            RothDesk
+          </CardTitle>
           <p className="text-muted-foreground">
             Admin Login
           </p>

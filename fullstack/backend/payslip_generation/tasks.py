@@ -295,8 +295,14 @@ def calculate_salary_components(salary_structure, pay_period):
     pf_employer = salary_structure.pf_employer
     professional_tax = salary_structure.professional_tax
     
-    # Calculate totals
-    total_earnings = basic + hra + da + conveyance + medical + special_allowance + pf_employee
+    # Calculate totals — correct three-bucket model:
+    #   gross_earnings  = pay components (basic, hra, da, conveyance, medical, special)
+    #   employee_deductions = pf_employee + professional_tax + lop_deduction + salary_advance
+    #   employer_contributions = pf_employer (cost to company, NOT deducted from employee)
+    #   net_pay = gross_earnings - employee_deductions
+    gross_earnings = basic + hra + da + conveyance + medical + special_allowance
+    total_earnings = gross_earnings  # what appears as "Total Earnings" on payslip
+
     lop_deduction = Decimal('0')
     if working_days > 0 and payable_days < Decimal(str(working_days)):
         monthly_base = Decimal(str(monthly_salary))
@@ -304,7 +310,8 @@ def calculate_salary_components(salary_structure, pay_period):
         payable_salary = salary_per_day * payable_days
         lop_deduction = max(monthly_base - payable_salary, Decimal('0')).quantize(Decimal('0.01'))
 
-    total_deductions = professional_tax + pf_employer + lop_deduction
+    # Employee-side deductions only
+    total_deductions = pf_employee + professional_tax + lop_deduction
     net_pay = total_earnings - total_deductions
 
     return {
@@ -320,7 +327,7 @@ def calculate_salary_components(salary_structure, pay_period):
         'pf_employee': Decimal(str(pf_employee)),
         'total_earnings': Decimal(str(total_earnings)),
         'professional_tax': Decimal(str(professional_tax)),
-        'pf_employer': Decimal(str(pf_employer)),
+        'pf_employer': Decimal(str(pf_employer)),   # employer cost, stored for reference
         'other_deductions': lop_deduction,
         'salary_advance': Decimal('0'),
         'total_deductions': Decimal(str(total_deductions)),

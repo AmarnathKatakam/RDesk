@@ -31,7 +31,7 @@ interface Payslip {
   pay_period_year: number;
   net_pay: number;
   is_released: boolean;
-  pdf_path: string;
+  download_url: string;
   generated_at: string;
 }
 
@@ -156,8 +156,28 @@ const EmployeeDashboard: React.FC = () => {
     navigate('/login');
   };
 
-  const handleDownloadPayslip = (payslip: Payslip) => {
-    window.open(`/media/${payslip.pdf_path}`, '_blank');
+  const handleDownloadPayslip = async (payslip: Payslip) => {
+    try {
+      const response = await fetch(`/api/payslips/${payslip.id}/download/`, {
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        alert((data as { message?: string }).message || 'Failed to download payslip');
+        return;
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `payslip_${payslip.pay_period_month}_${payslip.pay_period_year}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch {
+      alert('Error downloading payslip');
+    }
   };
 
   if (isLoading) {

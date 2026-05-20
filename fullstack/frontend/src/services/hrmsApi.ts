@@ -100,15 +100,43 @@ const makeQueryPath = (basePath: string, params?: URLSearchParams): string => {
   return `${basePath}?${params.toString()}`;
 };
 
+const getLeaveActionFallbackPaths = (
+  leaveRequestId: number,
+  action: 'approve' | 'reject'
+): string[] => [
+  `/api/hrms/leaves/${action}/`,
+  `/api/hrms/leaves/${leaveRequestId}/${action}/`,
+  `/api/auth/admin/leave/${action}/`,
+  `/api/auth/admin/leave/${leaveRequestId}/${action}/`,
+];
+
 export const hrmsApi = {
   getLeaveRequests: () =>
-    fetchWithFallback('/api/hrms/leaves/', ['/api/auth/leave/my-requests/']),
+    fetchWithFallback('/api/leave/my-requests/', ['/api/hrms/leaves/', '/api/auth/leave/my-requests/']),
+
+  getLeaveBalance: (year?: number) => {
+    const params = new URLSearchParams();
+    if (year) {
+      params.set('year', String(year));
+    }
+
+    return fetchWithFallback(
+      makeQueryPath('/api/leave/balance/', params),
+      [makeQueryPath('/api/hrms/leaves/balance/', params), makeQueryPath('/api/auth/leave/balance/', params)]
+    );
+  },
 
   getLeaveTypes: () =>
     fetchWithFallback('/api/hrms/leaves/types/', ['/api/auth/leave/types/']),
 
   applyLeave: (payload: FormData) =>
-    fetchWithFallback('/api/hrms/leaves/apply/', ['/api/auth/leave/apply/'], {
+    fetchWithFallback('/api/leave/apply/', ['/api/hrms/leaves/apply/', '/api/auth/leave/apply/'], {
+      method: 'POST',
+      body: payload,
+    }),
+
+  encashLeave: (payload: FormData) =>
+    fetchWithFallback('/api/leave/encash/', ['/api/hrms/leaves/encash/', '/api/auth/leave/encash/'], {
       method: 'POST',
       body: payload,
     }),
@@ -116,14 +144,24 @@ export const hrmsApi = {
   getPendingLeaves: () =>
     fetchWithFallback('/api/hrms/leaves/pending/', ['/api/auth/admin/leave/pending/']),
 
+  getAdminLeaves: (params?: URLSearchParams) =>
+    fetchWithFallback(
+      makeQueryPath('/api/admin/leave/all/', params),
+      [makeQueryPath('/api/hrms/leaves/all/', params), makeQueryPath('/api/auth/admin/leave/all/', params)]
+    ),
+
   approveLeave: (leaveRequestId: number) => {
     const payload = new FormData();
     payload.append('leave_request_id', String(leaveRequestId));
 
-    return fetchWithFallback('/api/hrms/leaves/approve/', ['/api/auth/admin/leave/approve/'], {
-      method: 'POST',
-      body: payload,
-    });
+    return fetchWithFallback(
+      `/api/admin/leave/${leaveRequestId}/approve/`,
+      getLeaveActionFallbackPaths(leaveRequestId, 'approve'),
+      {
+        method: 'POST',
+        body: payload,
+      }
+    );
   },
 
   rejectLeave: (leaveRequestId: number, rejectionReason: string) => {
@@ -133,8 +171,8 @@ export const hrmsApi = {
     payload.append('status', 'REJECTED');
 
     return fetchWithFallback(
-      '/api/hrms/leaves/approve/',
-      ['/api/hrms/leaves/reject/', '/api/auth/admin/leave/reject/'],
+      `/api/admin/leave/${leaveRequestId}/reject/`,
+      getLeaveActionFallbackPaths(leaveRequestId, 'reject'),
       {
         method: 'POST',
         body: payload,
@@ -143,7 +181,7 @@ export const hrmsApi = {
   },
 
   getDocuments: () =>
-    fetchWithFallback('/api/hrms/documents/', ['/api/auth/documents/my-documents/']),
+    fetchWithFallback('/api/hrms/documents/', ['/api/auth/documents/', '/api/auth/documents/my-documents/']),
 
   uploadDocument: (payload: FormData) =>
     fetchWithFallback('/api/hrms/documents/upload/', ['/api/auth/documents/upload/'], {

@@ -307,7 +307,5 @@ docker-compose up -d
 
 ---
 
-**BlackRoth Software Solutions Pvt. Ltd.**  
-13th FLOOR, MANJEERA TRINITY CORPORATE, JNTU - HITECH CITY ROAD, 3/d PHASE, KPHB, KUKATPALLY, HYDERABAD - 500072
 
 *Built with ❤️ for efficient payslip management*

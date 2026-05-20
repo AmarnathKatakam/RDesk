@@ -24,7 +24,12 @@ const APPS: AppItem[] = [
   { label: 'Settings',    path: '/admin/settings',   icon: Settings,        iconColor: 'text-slate-600',  iconBg: 'bg-slate-100' },
 ];
 
-const AppLauncher: React.FC = () => {
+interface AppLauncherProps {
+  /** When provided, clicking the icon also toggles the sidebar drawer */
+  onDrawerToggle?: () => void;
+}
+
+const AppLauncher: React.FC<AppLauncherProps> = ({ onDrawerToggle }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -55,7 +60,7 @@ const AppLauncher: React.FC = () => {
     <div ref={ref} className="relative">
       {/* 9-dot trigger */}
       <button
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => { setOpen((v) => !v); onDrawerToggle?.(); }}
         aria-label="App launcher"
         className={`h-9 w-9 rounded-xl flex items-center justify-center transition-colors ${
           open ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'

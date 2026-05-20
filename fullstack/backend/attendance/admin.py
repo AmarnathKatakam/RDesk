@@ -6,6 +6,7 @@ from .models import (
     AttendanceRecord,
     EmployeeShiftAssignment,
     Holiday,
+    HolidayCalendar,
     MonthlyAttendanceSummary,
     OfficeLocation,
     Shift,
@@ -33,11 +34,18 @@ class AttendancePolicyAdmin(admin.ModelAdmin):
     list_filter = ("enforce_gps", "allow_remote_punch", "auto_mark_absent", "is_active")
 
 
+@admin.register(HolidayCalendar)
+class HolidayCalendarAdmin(admin.ModelAdmin):
+    list_display = ("name", "year", "state", "is_active", "created_at")
+    search_fields = ("name",)
+    list_filter = ("year", "state", "is_active")
+
+
 @admin.register(Holiday)
 class HolidayAdmin(admin.ModelAdmin):
-    list_display = ("name", "holiday_date", "is_optional", "location")
+    list_display = ("name", "date", "holiday_type", "calendar", "is_active")
     search_fields = ("name",)
-    list_filter = ("is_optional", "holiday_date")
+    list_filter = ("holiday_type", "is_active", "date")
 
 
 @admin.register(EmployeeShiftAssignment)

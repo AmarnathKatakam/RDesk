@@ -101,8 +101,9 @@ export interface Payslip {
   salary_advance: number;
   total_deductions: number;
   net_pay: number;
-  pdf_path: string;
-  qr_code_data: string;
+  // pdf_path intentionally removed — use download_url for all file access
+  download_url: string;
+  filename: string;
   generated_at: string;
   generated_by: string;
 }

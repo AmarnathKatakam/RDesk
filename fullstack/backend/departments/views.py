@@ -1,6 +1,6 @@
 from rest_framework import status, generics
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
@@ -51,7 +51,11 @@ class DepartmentListCreateView(generics.ListCreateAPIView):
     """
     queryset = Department.objects.filter(is_active=True)
     serializer_class = DepartmentSerializer
-    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            return [AllowAny()]
+        return [IsAuthenticated()]
 
     def list(self, request, *args, **kwargs):
         ensure_default_it_departments()

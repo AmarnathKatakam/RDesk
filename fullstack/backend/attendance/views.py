@@ -166,6 +166,7 @@ def punch_in(request):
         actor = resolve_actor_context(request)
         latitude = _parse_decimal(request.data.get("latitude"), "latitude")
         longitude = _parse_decimal(request.data.get("longitude"), "longitude")
+        work_type = str(request.data.get("workType") or request.data.get("work_type") or "WFO").strip().upper()
 
         record, meta = punch_in_service(
             employee=employee,
@@ -173,13 +174,16 @@ def punch_in(request):
             latitude=latitude,
             longitude=longitude,
             notes=request.data.get("notes"),
+            work_type=work_type,
         )
         return Response(
             {
                 "success": True,
-                "message": "Punch in recorded successfully.",
+                "message": f"Punch in recorded successfully ({meta.get('work_type_label', work_type)}).",
                 "attendance": AttendanceRecordSerializer(record).data,
                 "distance_meters": meta.get("distance_meters"),
+                "work_type": meta.get("work_type"),
+                "work_type_label": meta.get("work_type_label"),
             },
             status=status.HTTP_200_OK,
         )
@@ -492,10 +496,10 @@ def attendance_dashboard(request):
 
 
 @api_view(["GET", "POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def shifts_collection(request):
     if request.method == "GET":
-        _ensure_default_it_shifts(request.user)
+        _ensure_default_it_shifts(request.user if request.user.is_authenticated else None)
         shifts = Shift.objects.filter(is_active=True).order_by("name")
         return Response({"success": True, "shifts": ShiftSerializer(shifts, many=True).data})
 
@@ -530,10 +534,10 @@ def shift_detail(request, shift_id):
 
 
 @api_view(["GET", "POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def office_location_collection(request):
     if request.method == "GET":
-        locations = OfficeLocation.objects.all().order_by("name")
+        locations = OfficeLocation.objects.filter(is_active=True).order_by("name")
         return Response({"success": True, "office_locations": OfficeLocationSerializer(locations, many=True).data})
 
     serializer = OfficeLocationSerializer(data=request.data)
@@ -611,7 +615,7 @@ def attendance_policy_detail(request, policy_id):
 @permission_classes([IsAuthenticated])
 def holiday_collection(request):
     if request.method == "GET":
-        holidays = Holiday.objects.all().order_by("holiday_date")
+        holidays = Holiday.objects.all().order_by("date")
         return Response({"success": True, "holidays": HolidaySerializer(holidays, many=True).data})
 
     serializer = HolidaySerializer(data=request.data)

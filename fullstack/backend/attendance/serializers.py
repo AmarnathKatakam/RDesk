@@ -62,6 +62,7 @@ class AttendancePolicySerializer(serializers.ModelSerializer):
             "default_office_location_name",
             "enforce_gps",
             "allow_remote_punch",
+            "allowed_work_types",
             "auto_mark_absent",
             "min_half_day_hours",
             "full_day_hours",
@@ -73,17 +74,18 @@ class AttendancePolicySerializer(serializers.ModelSerializer):
 
 
 class HolidaySerializer(serializers.ModelSerializer):
-    location_name = serializers.CharField(source="location.name", read_only=True)
+    calendar_name = serializers.CharField(source="calendar.name", read_only=True)
 
     class Meta:
         model = Holiday
         fields = [
             "id",
+            "calendar",
+            "calendar_name",
             "name",
-            "holiday_date",
-            "is_optional",
-            "location",
-            "location_name",
+            "date",
+            "holiday_type",
+            "is_active",
             "created_at",
             "updated_at",
         ]
@@ -122,6 +124,15 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
     employee_code = serializers.CharField(source="employee.employee_id", read_only=True)
     shift_name = serializers.CharField(source="shift.name", read_only=True)
     office_location_name = serializers.CharField(source="office_location.name", read_only=True)
+    work_type_label = serializers.SerializerMethodField()
+
+    def get_work_type_label(self, obj):
+        labels = {
+            "WFO":    "Work From Office",
+            "WFH":    "Work From Home",
+            "ONSITE": "On-site / Client Location",
+        }
+        return labels.get(obj.work_type, obj.work_type)
 
     class Meta:
         model = AttendanceRecord
@@ -143,6 +154,8 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
             "punch_out_longitude",
             "location_verified",
             "punch_out_location_verified",
+            "work_type",
+            "work_type_label",
             "working_hours",
             "overtime_hours",
             "status",

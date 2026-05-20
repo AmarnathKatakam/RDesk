@@ -3,95 +3,100 @@ HRMS Advanced Modules Views
 Handles Leave Management, Document Vault, Notifications, Directory, and CEODashboard
 """
 
-from django.shortcuts import get_object_or_404
-from django.utils import timezone
-from django.db.models import Q, Count, F, ExpressionWrapper, FloatField, Sum as DjangoSum
-from django.views.decorators.http import require_http_methods
-from django.http import JsonResponse, FileResponse
-from django.core.files.storage import default_storage
-from django.core.paginator import Paginator
+import json
 import os
 from datetime import datetime, timedelta, date
 from decimal import Decimal
 
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from django.db.models import Q, Count, F, ExpressionWrapper, FloatField, Sum as DjangoSum
+from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import csrf_exempt
+from django.http import JsonResponse, FileResponse
+from django.core.files.storage import default_storage
+from django.core.paginator import Paginator
+
 from employees.models import (
     Employee, LeaveRequest, LeaveType, EmployeeDocument,
-    Notification, EmployeeAttendance
+    Notification, EmployeeAttendance,
+)
+from employees.leave_services import (
+    LeaveManagementError,
+    apply_leave_request,
+    approve_leave_request,
+    encash_earned_leave,
+    get_admin_leave_requests_data,
+    get_employee_leave_requests_data,
+    get_leave_balance_data,
+    list_leave_types,
+    reject_leave_request,
+    summarize_leave_requests_data,
 )
 from authentication.models import AdminUser
 from payslip_generation.models import Payslip
 from departments.models import Department
 
-DEFAULT_LEAVE_TYPES = [
-    ("Earned Leave", 18),
-    ("Sick Leave", 12),
-    ("Casual Leave", 12),
-]
-
-
-def _ensure_default_leave_types():
-    for name, max_days in DEFAULT_LEAVE_TYPES:
-        LeaveType.objects.get_or_create(
-            name=name,
-            defaults={
-                "max_days_per_year": max_days,
-                "is_active": True,
-            },
-        )
+def _read_request_data(request):
+    if request.content_type and 'application/json' in request.content_type:
+        try:
+            return json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return {}
+    return request.POST
 
 # =====================================================
 # LEAVE MANAGEMENT ENDPOINTS
 # =====================================================
 
+@csrf_exempt
 @require_http_methods(["POST"])
 def apply_leave(request):
-    """Employee applies for leave"""
+    """Employee applies for leave — validates balance before creating request."""
     try:
-        data = request.POST
         employee_id = request.session.get('employee_id')
-        
         if not employee_id:
             return JsonResponse({'success': False, 'message': 'Unauthorized'}, status=401)
-        
+
+        data = _read_request_data(request)
+
         employee = get_object_or_404(Employee, id=employee_id)
-        leave_type = get_object_or_404(LeaveType, id=data.get('leave_type_id'))
-        
-        start_date = datetime.strptime(data.get('start_date'), '%Y-%m-%d').date()
-        end_date = datetime.strptime(data.get('end_date'), '%Y-%m-%d').date()
+        leave_type_id = data.get('leave_type_id') or data.get('leave_type')
+        leave_type = get_object_or_404(LeaveType, id=leave_type_id, is_active=True)
+
+        try:
+            start_date = datetime.strptime(data.get('start_date'), '%Y-%m-%d').date()
+            end_date = datetime.strptime(data.get('end_date'), '%Y-%m-%d').date()
+        except (TypeError, ValueError):
+            return JsonResponse(
+                {'success': False, 'message': 'Invalid leave dates. Use YYYY-MM-DD.'},
+                status=400,
+            )
         reason = data.get('reason', '')
-        
-        # Validation
-        if start_date > end_date:
-            return JsonResponse({'success': False, 'message': 'Start date cannot be after end date'})
-        
-        if start_date < timezone.now().date():
-            return JsonResponse({'success': False, 'message': 'Cannot apply for past dates'})
-        
-        # Create leave request
-        leave_request = LeaveRequest.objects.create(
+
+        result = apply_leave_request(
             employee=employee,
             leave_type=leave_type,
             start_date=start_date,
             end_date=end_date,
             reason=reason,
-            status='PENDING'
         )
-        
-        # Create notification for admin
-        Notification.objects.create(
-            employee=employee,
-            notification_type='ANNOUNCEMENT',
-            title=f'New Leave Request: {employee.name}',
-            message=f'{employee.name} has applied for {leave_type.name} leave from {start_date} to {end_date}',
-            related_id=leave_request.id
-        )
-        
+
         return JsonResponse({
             'success': True,
             'message': 'Leave request submitted successfully',
-            'leave_request_id': leave_request.id
+            'leave_request_id': result['leave_request']['id'],
+            'leave_request': result['leave_request'],
+            'requested_days': result['requested_days'],
+            'balances_by_year': result['balances_by_year'],
+            'policy': result['policy'],
         })
-    
+
+    except LeaveManagementError as exc:
+        return JsonResponse(
+            {'success': False, 'message': exc.message, **exc.payload},
+            status=exc.status_code,
+        )
     except Exception as e:
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
 
@@ -106,22 +111,13 @@ def get_my_leave_requests(request):
             return JsonResponse({'success': False, 'message': 'Unauthorized'}, status=401)
         
         employee = get_object_or_404(Employee, id=employee_id)
-        leave_requests = LeaveRequest.objects.filter(employee=employee).select_related('leave_type')
+        data = get_employee_leave_requests_data(employee)
         
-        data = [{
-            'id': lr.id,
-            'leave_type': lr.leave_type.name if lr.leave_type else 'N/A',
-            'start_date': lr.start_date.isoformat(),
-            'end_date': lr.end_date.isoformat(),
-            'number_of_days': lr.number_of_days,
-            'reason': lr.reason,
-            'status': lr.status,
-            'approved_date': lr.approved_date.isoformat() if lr.approved_date else None,
-            'rejection_reason': lr.rejection_reason,
-            'created_at': lr.created_at.isoformat(),
-        } for lr in leave_requests]
-        
-        return JsonResponse({'success': True, 'leave_requests': data})
+        return JsonResponse({
+            'success': True,
+            'leave_requests': data,
+            'summary': summarize_leave_requests_data(data),
+        })
     
     except Exception as e:
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
@@ -131,55 +127,60 @@ def get_my_leave_requests(request):
 def get_leave_types(request):
     """Get all active leave types"""
     try:
-        _ensure_default_leave_types()
-        leave_types = LeaveType.objects.filter(is_active=True)
-        
-        data = [{
-            'id': lt.id,
-            'name': lt.name,
-            'max_days_per_year': lt.max_days_per_year
-        } for lt in leave_types]
-        
+        data = list_leave_types()
         return JsonResponse({'success': True, 'leave_types': data})
     
     except Exception as e:
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
 
 
+@csrf_exempt
 @require_http_methods(["POST"])
-def admin_approve_leave(request):
-    """Admin approves a leave request"""
+def admin_approve_leave(request, leave_request_id=None):
+    """
+    Admin/HR approves a leave request.
+    On approval:
+      1. Deducts days from EmployeeLeaveBalance (atomic F() update)
+      2. Marks AttendanceRecord rows as LEAVE for each approved day
+      3. Sends LEAVE_APPROVED notification to employee
+    """
     try:
         admin_id = request.session.get('admin_id')
-        
         if not admin_id:
             return JsonResponse({'success': False, 'message': 'Unauthorized'}, status=401)
-        
+
+        data = _read_request_data(request)
         admin = get_object_or_404(AdminUser, id=admin_id)
-        leave_request = get_object_or_404(LeaveRequest, id=request.POST.get('leave_request_id'))
-        
-        leave_request.status = 'APPROVED'
-        leave_request.approved_by = admin
-        leave_request.approved_date = timezone.now()
-        leave_request.save()
-        
-        # Create notification for employee
-        Notification.objects.create(
-            employee=leave_request.employee,
-            notification_type='LEAVE_APPROVED',
-            title='Leave Approved',
-            message=f'Your {leave_request.leave_type.name} leave from {leave_request.start_date} to {leave_request.end_date} has been approved.',
-            related_id=leave_request.id
+        target_leave_request_id = leave_request_id or data.get('leave_request_id')
+        try:
+            parsed_leave_request_id = int(target_leave_request_id)
+        except (TypeError, ValueError):
+            return JsonResponse({'success': False, 'message': 'Invalid leave request id.'}, status=400)
+
+        result = approve_leave_request(
+            leave_request_id=parsed_leave_request_id,
+            admin=admin,
         )
-        
-        return JsonResponse({'success': True, 'message': 'Leave approved successfully'})
-    
+
+        return JsonResponse({
+            'success': True,
+            'message': 'Leave approved successfully',
+            'leave_request': result['leave_request'],
+            'balances': result['balances'],
+        })
+
+    except LeaveManagementError as exc:
+        return JsonResponse(
+            {'success': False, 'message': exc.message, **exc.payload},
+            status=exc.status_code,
+        )
     except Exception as e:
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
 
 
+@csrf_exempt
 @require_http_methods(["POST"])
-def admin_reject_leave(request):
+def admin_reject_leave(request, leave_request_id=None):
     """Admin rejects a leave request"""
     try:
         admin_id = request.session.get('admin_id')
@@ -187,27 +188,32 @@ def admin_reject_leave(request):
         if not admin_id:
             return JsonResponse({'success': False, 'message': 'Unauthorized'}, status=401)
         
+        data = _read_request_data(request)
         admin = get_object_or_404(AdminUser, id=admin_id)
-        leave_request = get_object_or_404(LeaveRequest, id=request.POST.get('leave_request_id'))
-        rejection_reason = request.POST.get('rejection_reason', '')
-        
-        leave_request.status = 'REJECTED'
-        leave_request.approved_by = admin
-        leave_request.approved_date = timezone.now()
-        leave_request.rejection_reason = rejection_reason
-        leave_request.save()
-        
-        # Create notification for employee
-        Notification.objects.create(
-            employee=leave_request.employee,
-            notification_type='LEAVE_REJECTED',
-            title='Leave Rejected',
-            message=f'Your {leave_request.leave_type.name} leave has been rejected. Reason: {rejection_reason}',
-            related_id=leave_request.id
+        rejection_reason = data.get('rejection_reason', '')
+        target_leave_request_id = leave_request_id or data.get('leave_request_id')
+        try:
+            parsed_leave_request_id = int(target_leave_request_id)
+        except (TypeError, ValueError):
+            return JsonResponse({'success': False, 'message': 'Invalid leave request id.'}, status=400)
+
+        result = reject_leave_request(
+            leave_request_id=parsed_leave_request_id,
+            admin=admin,
+            rejection_reason=rejection_reason,
         )
         
-        return JsonResponse({'success': True, 'message': 'Leave rejected successfully'})
-    
+        return JsonResponse({
+            'success': True,
+            'message': 'Leave rejected successfully',
+            'leave_request': result['leave_request'],
+        })
+
+    except LeaveManagementError as exc:
+        return JsonResponse(
+            {'success': False, 'message': exc.message, **exc.payload},
+            status=exc.status_code,
+        )
     except Exception as e:
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
 
@@ -221,22 +227,103 @@ def admin_get_pending_leaves(request):
         if not admin_id:
             return JsonResponse({'success': False, 'message': 'Unauthorized'}, status=401)
         
-        pending_leaves = LeaveRequest.objects.filter(status='PENDING').select_related('employee', 'leave_type')
+        data = get_admin_leave_requests_data(status='PENDING')
         
-        data = [{
-            'id': lr.id,
-            'employee_name': lr.employee.name,
-            'employee_id': lr.employee.employee_id,
-            'leave_type': lr.leave_type.name if lr.leave_type else 'N/A',
-            'start_date': lr.start_date.isoformat(),
-            'end_date': lr.end_date.isoformat(),
-            'number_of_days': lr.number_of_days,
-            'reason': lr.reason,
-            'created_at': lr.created_at.isoformat(),
-        } for lr in pending_leaves]
-        
-        return JsonResponse({'success': True, 'pending_leaves': data})
+        return JsonResponse({
+            'success': True,
+            'pending_leaves': data,
+            'summary': summarize_leave_requests_data(data),
+        })
     
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+
+@require_http_methods(["GET"])
+def admin_get_all_leaves(request):
+    """
+    Admin views all leave requests with optional status/employee filter.
+    GET params: status (PENDING|APPROVED|REJECTED|CANCELLED), employee_id
+    """
+    try:
+        admin_id = request.session.get('admin_id')
+        if not admin_id:
+            return JsonResponse({'success': False, 'message': 'Unauthorized'}, status=401)
+
+        status_filter = request.GET.get('status')
+        emp_filter = request.GET.get('employee_id')
+        data = get_admin_leave_requests_data(
+            status=status_filter,
+            employee_filter=emp_filter,
+        )
+
+        return JsonResponse({
+            'success': True,
+            'leave_requests': data,
+            'summary': summarize_leave_requests_data(data),
+        })
+
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+
+@require_http_methods(["GET"])
+def get_leave_balance(request):
+    """
+    Employee fetches their leave balance for the current year.
+    Returns all leave types with allocated / used / remaining.
+    """
+    try:
+        employee_id = request.session.get('employee_id')
+        if not employee_id:
+            return JsonResponse({'success': False, 'message': 'Unauthorized'}, status=401)
+
+        employee = get_object_or_404(Employee, id=employee_id)
+        requested_year = request.GET.get('year')
+        year = int(requested_year) if requested_year else None
+
+        balance_data = get_leave_balance_data(employee, year=year)
+        return JsonResponse({'success': True, **balance_data})
+
+    except (TypeError, ValueError):
+        return JsonResponse({'success': False, 'message': 'Invalid year.'}, status=400)
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def leave_encash(request):
+    """Employee encashes eligible earned leave."""
+    try:
+        employee_id = request.session.get('employee_id')
+        if not employee_id:
+            return JsonResponse({'success': False, 'message': 'Unauthorized'}, status=401)
+
+        data = _read_request_data(request)
+        employee = get_object_or_404(Employee, id=employee_id)
+        requested_days = data.get('requested_days') or data.get('days')
+        remarks = data.get('remarks', '')
+
+        result = encash_earned_leave(
+            employee=employee,
+            requested_days=requested_days,
+            remarks=remarks,
+        )
+
+        return JsonResponse({
+            'success': True,
+            'message': 'Earned leave encashed successfully',
+            'encashment': result['encashment'],
+            'balance': result['balance'],
+            'encashment_summary': result['encashment_summary'],
+        })
+
+    except LeaveManagementError as exc:
+        return JsonResponse(
+            {'success': False, 'message': exc.message, **exc.payload},
+            status=exc.status_code,
+        )
     except Exception as e:
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
 
@@ -245,6 +332,46 @@ def admin_get_pending_leaves(request):
 # DOCUMENT VAULT ENDPOINTS
 # =====================================================
 
+def _serialize_document(document):
+    return {
+        'id': document.id,
+        'document_code': document.document_type,
+        'document_type': document.get_document_type_display(),
+        'document_name': document.document_name,
+        'uploaded_at': document.uploaded_at.isoformat(),
+        'employee_id': document.employee.id,
+        'employee_code': document.employee.employee_id,
+        'employee_name': document.employee.name,
+        'uploaded_by': document.uploaded_by.full_name if document.uploaded_by else 'Employee',
+        'visibility': document.visibility,
+        'file_url': document.file.url if document.file else None,
+        'is_verified': document.is_verified,
+    }
+
+
+@require_http_methods(["GET"])
+def get_documents(request):
+    """Return employee documents for the current employee or all documents for admin."""
+    try:
+        employee_id = request.session.get('employee_id')
+        admin_id = request.session.get('admin_id')
+
+        if admin_id:
+            documents = EmployeeDocument.objects.select_related('employee', 'uploaded_by').all()
+        elif employee_id:
+            documents = EmployeeDocument.objects.select_related('employee', 'uploaded_by').filter(
+                employee_id=employee_id
+            )
+        else:
+            return JsonResponse({'success': False, 'message': 'Unauthorized'}, status=401)
+
+        data = [_serialize_document(doc) for doc in documents]
+        return JsonResponse({'success': True, 'documents': data})
+
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+@csrf_exempt
 @require_http_methods(["POST"])
 def upload_document(request):
     """Employee uploads a document"""
@@ -272,7 +399,7 @@ def upload_document(request):
             document_type=doc_type,
             document_name=doc_name,
             file=file,
-            visibility='EMPLOYEE_ONLY'
+            visibility='BOTH'
         )
         
         return JsonResponse({
@@ -294,16 +421,10 @@ def get_my_documents(request):
         if not employee_id:
             return JsonResponse({'success': False, 'message': 'Unauthorized'}, status=401)
         
-        employee = get_object_or_404(Employee, id=employee_id)
-        documents = EmployeeDocument.objects.filter(employee=employee)
-        
-        data = [{
-            'id': doc.id,
-            'document_type': doc.get_document_type_display(),
-            'document_name': doc.document_name,
-            'uploaded_at': doc.uploaded_at.isoformat(),
-            'file_url': doc.file.url if doc.file else None
-        } for doc in documents]
+        documents = EmployeeDocument.objects.select_related('employee', 'uploaded_by').filter(
+            employee_id=employee_id
+        )
+        data = [_serialize_document(doc) for doc in documents]
         
         return JsonResponse({'success': True, 'documents': data})
     
@@ -311,6 +432,7 @@ def get_my_documents(request):
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
 
 
+@csrf_exempt
 @require_http_methods(["DELETE"])
 def delete_document(request, doc_id):
     """Delete a document"""
@@ -339,13 +461,14 @@ def download_document(request, doc_id):
     """Download a document"""
     try:
         employee_id = request.session.get('employee_id')
+        admin_id = request.session.get('admin_id')
         
-        if not employee_id:
+        if not employee_id and not admin_id:
             return JsonResponse({'success': False, 'message': 'Unauthorized'}, status=401)
         
-        document = get_object_or_404(EmployeeDocument, id=doc_id)
+        document = get_object_or_404(EmployeeDocument.objects.select_related('employee'), id=doc_id)
         
-        if document.employee.id != int(employee_id):
+        if employee_id and document.employee.id != int(employee_id):
             return JsonResponse({'success': False, 'message': 'Unauthorized'}, status=401)
         
         if not document.file:

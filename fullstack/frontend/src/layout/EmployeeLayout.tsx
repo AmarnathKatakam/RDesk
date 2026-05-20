@@ -1,67 +1,72 @@
-/**
- * Component: layout\EmployeeLayout.tsx
- * Purpose: Defines UI structure and behavior for this view/component.
- */
 import React, { useMemo, useState } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, FileText, UserCircle, Clock3, CalendarDays } from 'lucide-react';
-import Sidebar, { type SidebarItem } from '@/components/Sidebar';
-import Header from '@/components/Header';
+import { LayoutDashboard, FileText, UserCircle, Clock3, CalendarDays, Grid3x3, FolderClosed, Wallet, BookUser, Settings } from 'lucide-react';
+import TopBar from '@/components/TopBar';
+import AppDrawer, { type DrawerNavItem } from '@/components/AppDrawer';
+
+const EMPLOYEE_NAV: DrawerNavItem[] = [
+  { label: 'Dashboard',  path: '/employee/dashboard',  icon: LayoutDashboard },
+  { label: 'Attendance', path: '/employee/attendance', icon: Clock3          },
+  { label: 'Payslips',   path: '/employee/payslips',   icon: FileText        },
+  { label: 'Salary',     path: '/employee/salary',     icon: Wallet          },
+  { label: 'Leaves',     path: '/employee/leaves',     icon: CalendarDays    },
+  { label: 'Documents',  path: '/employee/documents',  icon: FolderClosed    },
+  { label: 'Team',       path: '/employee/team',       icon: BookUser        },
+  { label: 'Profile',    path: '/employee/profile',    icon: UserCircle      },
+  { label: 'Settings',   path: '/employee/settings',   icon: Settings        },
+];
 
 const EmployeeLayout: React.FC = () => {
   const navigate = useNavigate();
-  const [collapsed, setCollapsed] = useState(false);
-  const [search, setSearch] = useState('');
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const employee = useMemo(() => {
-    try {
-      return JSON.parse(localStorage.getItem('user') || '{}');
-    } catch (error) {
-      return {};
-    }
+    try { return JSON.parse(localStorage.getItem('user') || '{}'); }
+    catch { return {}; }
   }, []);
 
-  const menuItems = useMemo<SidebarItem[]>(
-    () => [
-      { label: 'Dashboard', path: '/employee/dashboard', icon: LayoutDashboard },
-      { label: 'Attendance', path: '/employee/attendance', icon: Clock3 },
-      { label: 'Leaves', path: '/employee/leaves', icon: CalendarDays },
-      { label: 'Payslips', path: '/employee/payslips', icon: FileText },
-      { label: 'Profile', path: '/employee/profile', icon: UserCircle },
-    ],
-    []
-  );
-
   const handleLogout = () => {
-    localStorage.removeItem('user');
-    localStorage.removeItem('userType');
-    localStorage.removeItem('userRole');
-    localStorage.removeItem('userId');
-    localStorage.removeItem('authToken');
+    ['user', 'userType', 'userRole', 'userId', 'authToken'].forEach((k) =>
+      localStorage.removeItem(k)
+    );
     navigate('/login');
   };
 
   return (
-    <div className="min-h-screen">
-      <Sidebar items={menuItems} collapsed={collapsed} onToggle={() => setCollapsed((value) => !value)} />
-      <Header
-        collapsed={collapsed}
-        searchValue={search}
-        onSearchChange={setSearch}
+    <div className="min-h-screen bg-slate-50">
+      <TopBar
+        leftIcon={
+          <button
+            onClick={() => setDrawerOpen((v) => !v)}
+            aria-label="Open menu"
+            className={`h-9 w-9 rounded-xl flex items-center justify-center transition-colors ${
+              drawerOpen ? 'bg-teal-50 text-teal-700' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'
+            }`}
+          >
+            <Grid3x3 className="h-5 w-5" />
+          </button>
+        }
         userName={employee?.name || 'Employee'}
         userRole="Employee"
         onLogout={handleLogout}
+        showSearch={false}
       />
-      <main
-        className={`pt-20 pb-8 px-4 sm:px-6 transition-all duration-300 ${
-          collapsed ? 'ml-[84px]' : 'ml-72'
-        }`}
-      >
-        <Outlet />
+
+      <AppDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        items={EMPLOYEE_NAV}
+        userName={employee?.name || 'Employee'}
+        userRole="Employee"
+      />
+
+      <main className="pt-14 min-h-screen">
+        <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-6">
+          <Outlet />
+        </div>
       </main>
     </div>
   );
 };
 
 export default EmployeeLayout;
-

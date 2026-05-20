@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Search, Settings, LogOut, ChevronDown, Menu, X } from 'lucide-react';
-import AppLauncher from './AppLauncher';
 import NotificationBell from './NotificationBell';
 import Avatar from './Avatar';
 
@@ -185,10 +184,6 @@ const HrmsNavbar: React.FC<HrmsNavbarProps> = ({ userName, onLogout }) => {
 
       <header className="fixed top-0 inset-x-0 z-40 h-14 bg-white border-b border-slate-200 shadow-sm">
         <div ref={navRef} className="h-full px-3 sm:px-5 flex items-center gap-2">
-
-          {/* ── Left: launcher + logo + nav ── */}
-          <AppLauncher />
-
           {/* Logo */}
           <div className="flex items-center gap-2 shrink-0 mr-2">
             <img src="/logo.svg" alt="BlackRoth" className="h-7 w-auto" />

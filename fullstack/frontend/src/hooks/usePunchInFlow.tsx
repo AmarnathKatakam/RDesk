@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { attendanceAPI } from '@/services/api';
 
-export type WorkType = 'WFO' | 'WFH' | 'ON_SITE';
+export type WorkType = 'WFO' | 'WFH' | 'ONSITE';
 
 interface PunchCoordinates {
   latitude: number;
@@ -304,9 +304,9 @@ export const usePunchInFlow = ({
 
           <div className="grid gap-3">
             {[
-              { value: 'WFO' as WorkType, label: 'Work From Office (WFO)' },
-              { value: 'WFH' as WorkType, label: 'Work From Home (WFH)' },
-              { value: 'ON_SITE' as WorkType, label: 'On-site / Client Location' },
+              { value: 'WFO' as WorkType,    label: 'Work From Office (WFO)',       desc: 'Requires office geofence verification' },
+              { value: 'WFH' as WorkType,    label: 'Work From Home (WFH)',         desc: 'No geofence required' },
+              { value: 'ONSITE' as WorkType, label: 'On-site / Client Location',    desc: 'No geofence required' },
             ].map((option) => (
               <button
                 key={option.value}
@@ -319,6 +319,7 @@ export const usePunchInFlow = ({
                 }`}
               >
                 <div className="font-medium">{option.label}</div>
+                <div className="text-xs text-slate-400 mt-0.5">{option.desc}</div>
                 {suggestedWorkType === option.value ? (
                   <div className="mt-1 text-xs text-sky-700">Recommended based on your current location</div>
                 ) : null}
@@ -357,3 +358,114 @@ export const usePunchInFlow = ({
   };
 };
 
+
+// ─── Punch-Out Flow ───────────────────────────────────────────────────────────
+
+interface UsePunchOutFlowOptions {
+  employeeId?: string;
+  onSuccess: (message: string) => Promise<void> | void;
+  onError: (message: string) => void;
+}
+
+export const usePunchOutFlow = ({
+  employeeId,
+  onSuccess,
+  onError,
+}: UsePunchOutFlowOptions) => {
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [coords, setCoords] = useState<PunchCoordinates | null>(null);
+  const [locationMessage, setLocationMessage] = useState('');
+  const inFlightRef = useRef(false);
+
+  const beginPunchOut = async () => {
+    if (inFlightRef.current || submitting) return;
+    inFlightRef.current = true;
+    try {
+      let nextCoords: PunchCoordinates | null = null;
+      let nextMessage = '';
+      try {
+        nextCoords = await getCoordinates();
+      } catch (error: any) {
+        nextMessage = error?.message || 'Location could not be fetched.';
+      }
+      setCoords(nextCoords);
+      setLocationMessage(nextMessage);
+      setDialogOpen(true);
+    } catch (error: any) {
+      onError(error?.message || 'Unable to start punch out.');
+    } finally {
+      inFlightRef.current = false;
+    }
+  };
+
+  const confirmPunchOut = async () => {
+    try {
+      setSubmitting(true);
+      await attendanceAPI.punchOut({
+        employee_id: employeeId,
+        latitude: coords?.latitude,
+        longitude: coords?.longitude,
+      });
+      setDialogOpen(false);
+      await onSuccess('Punch out recorded successfully.');
+    } catch (error: any) {
+      onError(error?.response?.data?.message || 'Unable to mark punch out.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const dialog = (
+    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <MapPin className="h-5 w-5 text-slate-600" />
+            Confirm Punch Out
+          </DialogTitle>
+          <DialogDescription>
+            Your location will be captured at the time of punch out.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+            <div className="flex items-start gap-2">
+              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+              <p>Location is used only for attendance verification and is captured only at punch time.</p>
+            </div>
+          </div>
+
+          {locationMessage ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              {locationMessage}
+            </div>
+          ) : null}
+
+          {coords ? (
+            <div className="text-xs text-slate-500">
+              GPS captured at {coords.latitude.toFixed(5)}, {coords.longitude.toFixed(5)}
+              {typeof coords.accuracy === 'number' ? ` (accuracy ${Math.round(coords.accuracy)}m)` : ''}
+            </div>
+          ) : (
+            <div className="text-xs text-slate-500">
+              GPS was not available. Your punch out will be recorded without location.
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button type="button" onClick={() => void confirmPunchOut()} disabled={submitting}>
+            {submitting ? 'Submitting...' : 'Confirm Swipe Out'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
+  return { beginPunchOut, dialog, submitting };
+};

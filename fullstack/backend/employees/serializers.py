@@ -7,7 +7,7 @@ from django.core.mail import send_mail
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Q
 from django.utils import timezone
-from .models import Employee, SalaryStructure, MonthlySalaryData, EmployeeInvitation
+from .models import Employee, SalaryStructure, MonthlySalaryData, EmployeeInvitation, PayrollInputAdjustment
 from departments.models import Department
 
 
@@ -40,6 +40,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
     invitation = serializers.SerializerMethodField(read_only=True)
     dob = serializers.DateField(input_formats=['%d-%m-%Y', '%Y-%m-%d'], required=False, allow_null=True)
     doj = serializers.DateField(input_formats=['%d-%m-%Y', '%Y-%m-%d'], required=False, allow_null=True)
+    reporting_manager_name = serializers.CharField(source='reporting_manager.name', read_only=True)
     
     class Meta:
         model = Employee
@@ -73,6 +74,9 @@ class EmployeeSerializer(serializers.ModelSerializer):
             'account_activated',
             'onboarding_completed',
             'invitation',
+            'reporting_manager',
+            'reporting_manager_name',
+            'is_top_level_manager',
             'created_at',
             'updated_at'
         ]
@@ -445,15 +449,17 @@ class ExcelImportSerializer(serializers.Serializer):
 
 class MonthlySalaryDataSerializer(serializers.ModelSerializer):
     """
-    Serializer for MonthlySalaryData model.
+    Serializer for MonthlySalaryData model (extended in 3E).
     """
     employee_name = serializers.CharField(source='employee.name', read_only=True)
     employee_id = serializers.CharField(source='employee.employee_id', read_only=True)
     total_earnings = serializers.ReadOnlyField()
     total_deductions = serializers.ReadOnlyField()
     net_pay = serializers.ReadOnlyField()
+    effective_lop = serializers.ReadOnlyField()
     uploaded_by_name = serializers.CharField(source='uploaded_by.username', read_only=True)
-    
+    updated_by_name = serializers.CharField(source='updated_by.username', read_only=True, default=None)
+
     class Meta:
         model = MonthlySalaryData
         fields = [
@@ -463,6 +469,7 @@ class MonthlySalaryDataSerializer(serializers.ModelSerializer):
             'employee_id',
             'month',
             'year',
+            'salary_type',
             'basic',
             'hra',
             'da',
@@ -477,43 +484,108 @@ class MonthlySalaryDataSerializer(serializers.ModelSerializer):
             'work_days',
             'days_in_month',
             'lop_days',
+            'lop_override',
+            'effective_lop',
+            'bonus',
+            'incentive',
+            'arrears',
+            'reimbursement',
+            'other_earning_adjustment',
+            'other_deduction_adjustment',
+            'remarks',
+            'source',
             'total_earnings',
             'total_deductions',
             'net_pay',
             'uploaded_at',
             'uploaded_by',
-            'uploaded_by_name'
+            'uploaded_by_name',
+            'updated_by',
+            'updated_by_name',
+            'updated_at',
         ]
-        read_only_fields = ['id', 'uploaded_at', 'uploaded_by']
-    
+        read_only_fields = ['id', 'uploaded_at', 'uploaded_by', 'updated_by', 'updated_at']
+
     def validate_employee(self, value):
-        """
-        Validate employee exists and is active.
-        """
         if not value.is_active:
             raise serializers.ValidationError("Employee is not active.")
         return value
-    
+
     def validate(self, data):
-        """
-        Validate the salary data.
-        """
-        # Validate month format
         valid_months = [
             'January', 'February', 'March', 'April', 'May', 'June',
             'July', 'August', 'September', 'October', 'November', 'December'
         ]
-        if data.get('month') not in valid_months:
+        month = data.get('month')
+        if month is not None and month not in valid_months:
             raise serializers.ValidationError("Invalid month. Must be a full month name.")
-        
-        # Validate year
-        if data.get('year') < 2020 or data.get('year') > 2030:
+        year = data.get('year')
+        if year is not None and (year < 2020 or year > 2030):
             raise serializers.ValidationError("Year must be between 2020 and 2030.")
-        
-        # Validate work days
         if data.get('work_days', 0) > data.get('days_in_month', 31):
             raise serializers.ValidationError("Work days cannot exceed days in month.")
-        
+        # Validate non-negative one-time fields
+        for field in ('bonus', 'incentive', 'arrears', 'reimbursement',
+                      'other_earning_adjustment', 'other_deduction_adjustment'):
+            if data.get(field) is not None and data[field] < 0:
+                raise serializers.ValidationError({field: "Amount cannot be negative."})
+        return data
+
+
+class PayrollInputAdjustmentSerializer(serializers.ModelSerializer):
+    """
+    Serializer for PayrollInputAdjustment model.
+    """
+    employee_name = serializers.CharField(source='employee.name', read_only=True)
+    employee_code = serializers.CharField(source='employee.employee_id', read_only=True)
+    component_name = serializers.CharField(source='component.name', read_only=True, default=None)
+    created_by_name = serializers.CharField(source='created_by.username', read_only=True, default=None)
+    updated_by_name = serializers.CharField(source='updated_by.username', read_only=True, default=None)
+
+    class Meta:
+        model = PayrollInputAdjustment
+        fields = [
+            'id',
+            'employee',
+            'employee_name',
+            'employee_code',
+            'month',
+            'year',
+            'salary_type',
+            'adjustment_type',
+            'component',
+            'component_name',
+            'label',
+            'amount',
+            'is_taxable',
+            'is_recurring',
+            'remarks',
+            'is_active',
+            'created_by',
+            'created_by_name',
+            'updated_by',
+            'updated_by_name',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['id', 'created_by', 'updated_by', 'created_at', 'updated_at']
+
+    def validate_amount(self, value):
+        if value < 0:
+            raise serializers.ValidationError("Amount cannot be negative.")
+        return value
+
+    def validate(self, data):
+        valid_months = [
+            'January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December'
+        ]
+        month = data.get('month')
+        if month is not None and month not in valid_months:
+            raise serializers.ValidationError("Invalid month. Must be a full month name.")
+        year = data.get('year')
+        if year is not None and (year < 2020 or year > 2030):
+            raise serializers.ValidationError("Year must be between 2020 and 2030.")
         return data
 
 

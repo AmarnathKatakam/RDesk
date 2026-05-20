@@ -5,13 +5,16 @@ from employees.serializers import EmployeeSerializer
 
 class PayslipSerializer(serializers.ModelSerializer):
     """
-    Serializer for Payslip model.
+    Admin-facing payslip serializer.
+    Exposes pdf_path only for internal admin use (never returned to employees).
+    Employee-facing responses use employee_payslips_view which returns download_url instead.
     """
     employee = EmployeeSerializer(read_only=True)
     generated_by_name = serializers.CharField(source='generated_by.full_name', read_only=True)
     filename = serializers.ReadOnlyField()
-    file_path = serializers.ReadOnlyField()
-    
+    # download_url is the safe reference — pdf_path kept for admin internal use only
+    download_url = serializers.SerializerMethodField()
+
     class Meta:
         model = Payslip
         fields = [
@@ -37,14 +40,18 @@ class PayslipSerializer(serializers.ModelSerializer):
             'salary_advance',
             'total_deductions',
             'net_pay',
-            'pdf_path',
-            'qr_code_data',
+            'is_released',
+            'released_at',
             'generated_at',
             'generated_by_name',
             'filename',
-            'file_path'
+            'download_url',
+            # pdf_path intentionally excluded — use download_url instead
         ]
-        read_only_fields = ['id', 'generated_at']
+        read_only_fields = ['id', 'generated_at', 'released_at']
+
+    def get_download_url(self, obj):
+        return f'/api/payslips/{obj.id}/download/'
 
 
 class PayslipGenerationTaskSerializer(serializers.ModelSerializer):

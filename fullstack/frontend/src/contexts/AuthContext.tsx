@@ -50,13 +50,26 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   const checkAuthStatus = async () => {
-    const hasStoredSession =
-      Boolean(localStorage.getItem('authToken')) ||
-      Boolean(localStorage.getItem('user')) ||
-      Boolean(localStorage.getItem('userType')) ||
-      Boolean(localStorage.getItem('userRole'));
     const currentPath = window.location.pathname;
     const isPublicRoute = currentPath === '/login' || currentPath.startsWith('/activate/');
+    const userType = localStorage.getItem('userType');
+    const storedUser = localStorage.getItem('user');
+
+    // For employee routes, restore user from localStorage — no JWT profile call needed
+    if (userType === 'employee' && storedUser) {
+      try {
+        setUser(JSON.parse(storedUser));
+      } catch {
+        setUser(null);
+      }
+      setIsLoading(false);
+      return;
+    }
+
+    const hasStoredSession =
+      Boolean(localStorage.getItem('authToken')) ||
+      Boolean(storedUser) ||
+      Boolean(userType);
 
     if (!hasStoredSession && isPublicRoute) {
       setUser(null);
@@ -64,8 +77,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       return;
     }
 
-    // Skip profile check for employee routes to avoid 403 errors
-    const isEmployeeRoute = currentPath.startsWith('/employee/') && currentPath !== '/employee/login';
+    // Skip profile check for employee routes
+    const isEmployeeRoute = currentPath.startsWith('/employee/');
     if (isEmployeeRoute) {
       setUser(null);
       setIsLoading(false);

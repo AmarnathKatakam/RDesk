@@ -17,13 +17,14 @@ from django.contrib.auth.hashers import make_password
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django_filters.rest_framework import DjangoFilterBackend
-from .models import Employee, SalaryStructure, MonthlySalaryData, ActualSalaryCredited, EmailLog
+from .models import Employee, SalaryStructure, MonthlySalaryData, ActualSalaryCredited, EmailLog, PayrollInputAdjustment
 from .serializers import (
     EmployeeSerializer, 
     SalaryStructureSerializer, 
     ExcelImportSerializer,
     MonthlySalaryDataSerializer,
-    MonthlySalaryUploadSerializer
+    MonthlySalaryUploadSerializer,
+    PayrollInputAdjustmentSerializer,
 )
 from departments.models import Department
 
@@ -146,13 +147,12 @@ def regenerate_employee_password(request, pk):
     now = timezone.now()
 
     if mode == 'view':
-        previous_account_activated = employee.account_activated
-        previous_account_activated_at = employee.account_activated_at
         employee.password = hashed_password
         employee.password_changed = False
         employee.password_set_date = now
         employee.account_activated = True
         employee.account_activated_at = employee.account_activated_at or now
+        employee.onboarding_completed = True
         employee.save(
             update_fields=[
                 'password',
@@ -160,16 +160,14 @@ def regenerate_employee_password(request, pk):
                 'password_set_date',
                 'account_activated',
                 'account_activated_at',
+                'onboarding_completed',
                 'updated_at',
             ]
         )
 
         logging.getLogger('employees').info(
-            'Password regenerated in VIEW mode for employee_id=%s by user=%s role=%s (activated_before=%s)',
-            employee.employee_id,
-            request.user.username,
-            role,
-            previous_account_activated,
+            'Password regenerated in VIEW mode for employee_id=%s by user=%s role=%s',
+            employee.employee_id, request.user.username, role,
         )
 
         return Response({
@@ -180,14 +178,19 @@ def regenerate_employee_password(request, pk):
     previous_password = employee.password
     previous_password_changed = employee.password_changed
     previous_password_set_date = employee.password_set_date
+    previous_password = employee.password
+    previous_password_changed = employee.password_changed
+    previous_password_set_date = employee.password_set_date
     previous_account_activated = employee.account_activated
     previous_account_activated_at = employee.account_activated_at
+    previous_onboarding_completed = employee.onboarding_completed
 
     employee.password = hashed_password
     employee.password_changed = False
     employee.password_set_date = now
     employee.account_activated = True
     employee.account_activated_at = employee.account_activated_at or now
+    employee.onboarding_completed = True
     employee.save(
         update_fields=[
             'password',
@@ -195,6 +198,7 @@ def regenerate_employee_password(request, pk):
             'password_set_date',
             'account_activated',
             'account_activated_at',
+            'onboarding_completed',
             'updated_at',
         ]
     )
@@ -209,12 +213,13 @@ def regenerate_employee_password(request, pk):
             fail_silently=False,
         )
     except Exception as exc:
-        # Revert to previous password if mail fails, so employee is not locked out.
+        # Revert to previous state if mail fails
         employee.password = previous_password
         employee.password_changed = previous_password_changed
         employee.password_set_date = previous_password_set_date
         employee.account_activated = previous_account_activated
         employee.account_activated_at = previous_account_activated_at
+        employee.onboarding_completed = previous_onboarding_completed
         employee.save(
             update_fields=[
                 'password',
@@ -222,6 +227,7 @@ def regenerate_employee_password(request, pk):
                 'password_set_date',
                 'account_activated',
                 'account_activated_at',
+                'onboarding_completed',
                 'updated_at',
             ]
         )
@@ -1684,3 +1690,671 @@ def send_relieving_letter(request):
             'success': False,
             'message': f'Error: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ─── Letter Generation ────────────────────────────────────────────────────────
+
+LETTER_TYPES = {
+    'APPOINTMENT_ORDER': 'Appointment Order',
+    'CONFIRMATION_LETTER': 'Confirmation Letter',
+    'RELIEVING_LETTER': 'Relieving Letter',
+    'EXPERIENCE_LETTER': 'Experience Letter',
+    'OFFER_LETTER': 'Offer Letter',
+}
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_letter_types(request):
+    """Return available letter template types."""
+    return Response({
+        'letter_types': [
+            {'value': k, 'label': v} for k, v in LETTER_TYPES.items()
+        ]
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_signatories(request):
+    """Return list of employees who can act as signatories (managers/HR)."""
+    from .models import Employee
+    employees = Employee.objects.filter(is_active=True).values(
+        'id', 'name', 'position', 'employee_id'
+    ).order_by('name')
+    return Response({'signatories': list(employees)})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def preview_letter(request):
+    """
+    Return letter preview data for selected employees and template.
+    """
+    from .models import Employee
+    letter_type = request.data.get('letter_type')
+    employee_ids = request.data.get('employee_ids', [])
+    signatory_id = request.data.get('signatory_id')
+    extra = request.data.get('extra', {})
+
+    if not letter_type or letter_type not in LETTER_TYPES:
+        return Response({'error': 'Invalid letter type'}, status=400)
+    if not employee_ids:
+        return Response({'error': 'No employees selected'}, status=400)
+
+    employees = Employee.objects.filter(id__in=employee_ids, is_active=True)
+    signatory = None
+    if signatory_id:
+        try:
+            signatory = Employee.objects.get(id=signatory_id)
+        except Employee.DoesNotExist:
+            pass
+
+    from django.utils import timezone
+    today = timezone.now().date()
+
+    previews = []
+    for emp in employees:
+        previews.append({
+            'employee_id': emp.id,
+            'employee_code': emp.employee_id,
+            'employee_name': emp.name,
+            'position': emp.position,
+            'department': emp.department.department_name if emp.department else '',
+            'doj': str(emp.doj) if emp.doj else '',
+            'location': emp.location or '',
+            'letter_type': letter_type,
+            'letter_label': LETTER_TYPES[letter_type],
+            'signatory_name': signatory.name if signatory else '',
+            'signatory_position': signatory.position if signatory else '',
+            'generated_date': str(today),
+            'extra': extra,
+        })
+
+    return Response({'previews': previews})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def generate_letters(request):
+    """
+    Generate and return letter data for download/publish.
+    Records the generation in EmailLog.
+    """
+    from .models import Employee, EmailLog
+    letter_type = request.data.get('letter_type')
+    employee_ids = request.data.get('employee_ids', [])
+    signatory_id = request.data.get('signatory_id')
+
+    if not letter_type or letter_type not in LETTER_TYPES:
+        return Response({'error': 'Invalid letter type'}, status=400)
+    if not employee_ids:
+        return Response({'error': 'No employees selected'}, status=400)
+
+    employees = Employee.objects.filter(id__in=employee_ids, is_active=True)
+    signatory = None
+    if signatory_id:
+        try:
+            signatory = Employee.objects.get(id=signatory_id)
+        except Employee.DoesNotExist:
+            pass
+
+    from django.utils import timezone
+    today = timezone.now().date()
+
+    results = []
+    for emp in employees:
+        results.append({
+            'employee_id': emp.id,
+            'employee_code': emp.employee_id,
+            'employee_name': emp.name,
+            'position': emp.position,
+            'department': emp.department.department_name if emp.department else '',
+            'doj': str(emp.doj) if emp.doj else '',
+            'location': emp.location or '',
+            'letter_type': letter_type,
+            'letter_label': LETTER_TYPES[letter_type],
+            'signatory_name': signatory.name if signatory else '',
+            'signatory_position': signatory.position if signatory else '',
+            'generated_date': str(today),
+        })
+
+    return Response({
+        'success': True,
+        'letter_type': letter_type,
+        'letter_label': LETTER_TYPES[letter_type],
+        'count': len(results),
+        'letters': results,
+    })
+
+
+# ─── Mass Communication / Announcements ──────────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def list_announcements(request):
+    """List all announcements (admin view)."""
+    from .models import Announcement
+    items = Announcement.objects.select_related('sent_by').all()[:100]
+    data = [{
+        'id': a.id,
+        'title': a.title,
+        'category': a.category,
+        'subject': a.subject,
+        'body': a.body,
+        'recipient_filter': a.recipient_filter,
+        'total_recipients': a.total_recipients,
+        'sent_by': a.sent_by.username if a.sent_by else 'Admin',
+        'created_at': a.created_at.isoformat(),
+    } for a in items]
+    return Response({'announcements': data})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def send_announcement(request):
+    """
+    Create an announcement, fan-out per-employee Notification records,
+    and send a personalized email to each employee's personal_email (or email).
+    Body: { title, category, subject, body, recipient_filter }
+    recipient_filter: 'ALL' | department_id (int as string)
+    """
+    from .models import Announcement, AnnouncementRecipient, Notification, Employee
+    from authentication.models import AdminUser
+    from django.core.mail import EmailMultiAlternatives
+    from django.conf import settings
+    import logging
+    logger = logging.getLogger('employees')
+
+    title = request.data.get('title', '').strip()
+    category = request.data.get('category', 'GENERAL')
+    subject = request.data.get('subject', '').strip()
+    body = request.data.get('body', '').strip()
+    recipient_filter = request.data.get('recipient_filter', 'ALL')
+
+    if not title or not subject or not body:
+        return Response({'error': 'title, subject and body are required'}, status=400)
+
+    # Resolve admin user
+    admin_user = None
+    try:
+        admin_user = AdminUser.objects.get(id=request.user.id)
+    except Exception:
+        pass
+
+    # Resolve recipients
+    employees_qs = Employee.objects.filter(is_active=True)
+    if recipient_filter != 'ALL':
+        try:
+            dept_id = int(recipient_filter)
+            employees_qs = employees_qs.filter(department_id=dept_id)
+        except (ValueError, TypeError):
+            pass
+
+    employees = list(employees_qs)
+
+    # Create announcement record
+    announcement = Announcement.objects.create(
+        title=title,
+        category=category,
+        subject=subject,
+        body=body,
+        sent_by=admin_user,
+        recipient_filter=recipient_filter,
+        total_recipients=len(employees),
+    )
+
+    # Fan-out: create per-employee recipient + Notification records
+    recipient_objs = []
+    notification_objs = []
+    for emp in employees:
+        recipient_objs.append(AnnouncementRecipient(announcement=announcement, employee=emp))
+        notification_objs.append(Notification(
+            employee=emp,
+            notification_type='ANNOUNCEMENT',
+            title=subject,
+            message=f"Dear {emp.name} ({emp.employee_id}),\n\n{body}",
+            related_id=announcement.id,
+        ))
+
+    AnnouncementRecipient.objects.bulk_create(recipient_objs, ignore_conflicts=True)
+    Notification.objects.bulk_create(notification_objs)
+
+    # ── Send emails ──────────────────────────────────────────────────────────
+    company_name = "BlackRoth Software Solutions Pvt. Ltd."
+    from_email = settings.DEFAULT_FROM_EMAIL
+    sent_count = 0
+    failed_count = 0
+
+    for emp in employees:
+        recipient_email = (emp.personal_email or emp.email or '').strip()
+        if not recipient_email:
+            failed_count += 1
+            continue
+
+        personalized_body = f"Dear {emp.name} ({emp.employee_id}),\n\n{body}"
+
+        # Plain-text version
+        text_content = (
+            f"{subject}\n"
+            f"{'─' * 60}\n\n"
+            f"{personalized_body}\n\n"
+            f"─────────────────────────────────────────\n"
+            f"This is an official communication from {company_name}.\n"
+            f"Please do not reply to this email."
+        )
+
+        # HTML version
+        html_body_escaped = personalized_body.replace('\n', '<br>')
+        html_content = f"""
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="font-family:Arial,sans-serif;background:#f4f4f4;margin:0;padding:20px;">
+  <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+    <div style="background:#1e3a5f;padding:24px 32px;">
+      <h2 style="color:#ffffff;margin:0;font-size:18px;">{company_name}</h2>
+      <p style="color:#a8c4e0;margin:4px 0 0;font-size:13px;">Internal Communication</p>
+    </div>
+    <div style="padding:32px;">
+      <h3 style="color:#1e3a5f;margin:0 0 20px;font-size:16px;border-bottom:2px solid #e8f0fe;padding-bottom:12px;">{subject}</h3>
+      <p style="color:#374151;font-size:14px;line-height:1.7;margin:0;">{html_body_escaped}</p>
+    </div>
+    <div style="background:#f8fafc;padding:16px 32px;border-top:1px solid #e5e7eb;">
+      <p style="color:#9ca3af;font-size:12px;margin:0;">
+        This is an official communication from {company_name}. Please do not reply to this email.
+      </p>
+    </div>
+  </div>
+</body>
+</html>"""
+
+        try:
+            msg = EmailMultiAlternatives(
+                subject=subject,
+                body=text_content,
+                from_email=from_email,
+                to=[recipient_email],
+            )
+            msg.attach_alternative(html_content, "text/html")
+            msg.send()
+            sent_count += 1
+            logger.info(f"Announcement email sent to {recipient_email} ({emp.employee_id})")
+        except Exception as e:
+            failed_count += 1
+            logger.error(f"Failed to send announcement email to {recipient_email}: {e}")
+
+    summary = f"Announcement sent to {sent_count} employee(s)."
+    if failed_count:
+        summary += f" {failed_count} failed (no email address or send error)."
+
+    return Response({
+        'success': True,
+        'announcement_id': announcement.id,
+        'total_recipients': len(employees),
+        'emails_sent': sent_count,
+        'emails_failed': failed_count,
+        'message': summary,
+    })
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_announcement(request, pk):
+    """Delete an announcement and its recipient records."""
+    from .models import Announcement
+    try:
+        ann = Announcement.objects.get(pk=pk)
+        ann.delete()
+        return Response({'success': True})
+    except Announcement.DoesNotExist:
+        return Response({'error': 'Not found'}, status=404)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Milestone 3E — Monthly Salary Data Editor + Payroll Input Adjustments
+# ─────────────────────────────────────────────────────────────────────────────
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def monthly_salary_upsert(request):
+    """
+    Create or update monthly salary data for one employee (manual entry).
+    Requires: employee, month, year, salary_type (defaults SALARY).
+    Logs to PayrollAuditLog.
+    """
+    from django.utils import timezone as tz
+    from payslip_generation.audit import log_payroll_action
+
+    employee_id = request.data.get('employee')
+    month = request.data.get('month')
+    year = request.data.get('year')
+    salary_type = request.data.get('salary_type', 'SALARY')
+
+    if not all([employee_id, month, year]):
+        return Response({'success': False, 'message': 'employee, month, and year are required.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        employee = Employee.objects.get(pk=employee_id, is_active=True)
+    except Employee.DoesNotExist:
+        return Response({'success': False, 'message': 'Employee not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    existing = MonthlySalaryData.objects.filter(
+        employee=employee, month=month, year=year, salary_type=salary_type
+    ).first()
+
+    data = dict(request.data)
+    data['source'] = 'MANUAL_ENTRY'
+
+    if existing:
+        serializer = MonthlySalaryDataSerializer(existing, data=data, partial=True)
+    else:
+        serializer = MonthlySalaryDataSerializer(data=data)
+
+    if not serializer.is_valid():
+        return Response({'success': False, 'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+    with transaction.atomic():
+        if existing:
+            instance = serializer.save(
+                updated_by=request.user,
+                updated_at=tz.now(),
+                source='MANUAL_ENTRY',
+            )
+            action_note = f"Manual update: {employee.name} {month} {year} ({salary_type})"
+        else:
+            instance = serializer.save(
+                uploaded_by=request.user,
+                source='MANUAL_ENTRY',
+            )
+            action_note = f"Manual create: {employee.name} {month} {year} ({salary_type})"
+
+        log_payroll_action(
+            action='GENERATE',
+            performed_by=request.user,
+            employee=employee,
+            pay_period_month=month,
+            pay_period_year=int(year),
+            notes=action_note,
+        )
+
+    return Response({
+        'success': True,
+        'created': existing is None,
+        'data': MonthlySalaryDataSerializer(instance).data,
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def monthly_salary_list_by_period(request):
+    """
+    List ALL active employees' salary data for a given month/year/salary_type.
+    
+    Returns:
+    - Employees WITH existing MonthlySalaryData: full salary details
+    - Employees WITHOUT salary data: null row (editable, ready for entry)
+    - Includes active adjustment counts per employee
+    
+    Query params: month, year, salary_type (optional, default SALARY)
+    """
+    month = request.GET.get('month')
+    year = request.GET.get('year')
+    salary_type = request.GET.get('salary_type', 'SALARY')
+
+    if not month or not year:
+        return Response({'success': False, 'message': 'month and year are required.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        year = int(year)
+    except (TypeError, ValueError):
+        return Response({'success': False, 'message': 'year must be an integer.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    # Step 1: Get all active employees
+    all_employees = Employee.objects.filter(is_active=True).order_by('name')
+    
+    # Step 2: Get existing salary data for this month/year
+    existing_salaries = MonthlySalaryData.objects.filter(
+        month=month, year=year, salary_type=salary_type
+    ).select_related('employee', 'uploaded_by', 'updated_by')
+    
+    # Create a dict for quick lookup: {employee_id: salary_data}
+    salary_dict = {s.employee_id: s for s in existing_salaries}
+    
+    # Step 3: Get adjustment counts per employee
+    adj_counts = {}
+    for adj in PayrollInputAdjustment.objects.filter(
+        month=month, year=year, salary_type=salary_type, is_active=True
+    ).values('employee_id').annotate(cnt=models.Count('id')):
+        adj_counts[adj['employee_id']] = adj['cnt']
+    
+    # Step 4: Build response with all employees
+    data = []
+    for employee in all_employees:
+        if employee.id in salary_dict:
+            # Employee has existing salary data
+            salary = salary_dict[employee.id]
+            serializer = MonthlySalaryDataSerializer(salary)
+            row = serializer.data
+        else:
+            # Employee does NOT have salary data - create a placeholder row
+            row = {
+                'id': None,
+                'employee': employee.id,
+                'employee_name': employee.name,
+                'employee_id': employee.employee_id,
+                'month': month,
+                'year': year,
+                'salary_type': salary_type,
+                'basic': None,
+                'hra': None,
+                'da': None,
+                'conveyance': None,
+                'medical': None,
+                'special_allowance': None,
+                'pf_employee': None,
+                'professional_tax': None,
+                'pf_employer': None,
+                'other_deductions': 0,
+                'salary_advance': 0,
+                'work_days': None,
+                'days_in_month': None,
+                'lop_days': 0,
+                'lop_override': None,
+                'effective_lop': 0,
+                'bonus': 0,
+                'incentive': 0,
+                'arrears': 0,
+                'reimbursement': 0,
+                'other_earning_adjustment': 0,
+                'other_deduction_adjustment': 0,
+                'remarks': '',
+                'source': None,  # Indicates no existing record
+                'total_earnings': None,
+                'total_deductions': None,
+                'net_pay': None,
+                'uploaded_at': None,
+                'uploaded_by': None,
+                'uploaded_by_name': None,
+                'updated_by': None,
+                'updated_by_name': None,
+                'updated_at': None,
+            }
+        
+        # Attach adjustment count
+        row['adjustment_count'] = adj_counts.get(employee.id, 0)
+        data.append(row)
+    
+    return Response({'success': True, 'data': data, 'count': len(data)})
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def payroll_adjustment_list_create(request):
+    """
+    GET  — list adjustments for a period (month/year/salary_type query params)
+    POST — create a new adjustment
+    """
+    from payslip_generation.audit import log_payroll_action
+
+    if request.method == 'GET':
+        month = request.GET.get('month')
+        year = request.GET.get('year')
+        salary_type = request.GET.get('salary_type')
+        employee_id = request.GET.get('employee')
+
+        qs = PayrollInputAdjustment.objects.select_related(
+            'employee', 'component', 'created_by', 'updated_by'
+        )
+        if month:
+            qs = qs.filter(month=month)
+        if year:
+            qs = qs.filter(year=int(year))
+        if salary_type:
+            qs = qs.filter(salary_type=salary_type)
+        if employee_id:
+            qs = qs.filter(employee_id=employee_id)
+
+        serializer = PayrollInputAdjustmentSerializer(qs, many=True)
+        return Response({'success': True, 'data': serializer.data, 'count': qs.count()})
+
+    # POST — create
+    serializer = PayrollInputAdjustmentSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response({'success': False, 'errors': serializer.errors},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    with transaction.atomic():
+        instance = serializer.save(created_by=request.user)
+        log_payroll_action(
+            action='GENERATE',
+            performed_by=request.user,
+            employee=instance.employee,
+            pay_period_month=instance.month,
+            pay_period_year=instance.year,
+            notes=f"Adjustment created: {instance.label} ₹{instance.amount} ({instance.adjustment_type})",
+        )
+
+    return Response({'success': True, 'data': PayrollInputAdjustmentSerializer(instance).data},
+                    status=status.HTTP_201_CREATED)
+
+
+@api_view(['GET', 'PUT', 'PATCH', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def payroll_adjustment_detail(request, pk):
+    """
+    GET    — retrieve one adjustment
+    PUT/PATCH — update
+    DELETE — soft-delete (set is_active=False) or hard delete
+    """
+    from payslip_generation.audit import log_payroll_action
+
+    try:
+        instance = PayrollInputAdjustment.objects.select_related('employee').get(pk=pk)
+    except PayrollInputAdjustment.DoesNotExist:
+        return Response({'success': False, 'message': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'GET':
+        return Response({'success': True, 'data': PayrollInputAdjustmentSerializer(instance).data})
+
+    if request.method == 'DELETE':
+        with transaction.atomic():
+            log_payroll_action(
+                action='GENERATE',
+                performed_by=request.user,
+                employee=instance.employee,
+                pay_period_month=instance.month,
+                pay_period_year=instance.year,
+                notes=f"Adjustment deleted: {instance.label} ₹{instance.amount}",
+            )
+            instance.delete()
+        return Response({'success': True, 'message': 'Adjustment deleted.'})
+
+    # PUT / PATCH
+    partial = request.method == 'PATCH'
+    serializer = PayrollInputAdjustmentSerializer(instance, data=request.data, partial=partial)
+    if not serializer.is_valid():
+        return Response({'success': False, 'errors': serializer.errors},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    with transaction.atomic():
+        updated = serializer.save(updated_by=request.user)
+        log_payroll_action(
+            action='GENERATE',
+            performed_by=request.user,
+            employee=updated.employee,
+            pay_period_month=updated.month,
+            pay_period_year=updated.year,
+            notes=f"Adjustment updated: {updated.label} ₹{updated.amount}",
+        )
+
+    return Response({'success': True, 'data': PayrollInputAdjustmentSerializer(updated).data})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def monthly_payroll_preview(request):
+    """
+    Preview net pay impact for one employee including adjustments.
+    Query params: employee, month, year, salary_type
+    """
+    employee_id = request.GET.get('employee')
+    month = request.GET.get('month')
+    year = request.GET.get('year')
+    salary_type = request.GET.get('salary_type', 'SALARY')
+
+    if not all([employee_id, month, year]):
+        return Response({'success': False, 'message': 'employee, month, and year are required.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        employee = Employee.objects.get(pk=employee_id, is_active=True)
+    except Employee.DoesNotExist:
+        return Response({'success': False, 'message': 'Employee not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    salary_data = MonthlySalaryData.objects.filter(
+        employee=employee, month=month, year=int(year), salary_type=salary_type
+    ).first()
+
+    adjustments = PayrollInputAdjustment.objects.filter(
+        employee=employee, month=month, year=int(year),
+        salary_type=salary_type, is_active=True,
+    ).select_related('component')
+
+    adj_earnings = sum(
+        a.amount for a in adjustments
+        if a.adjustment_type in ('EARNING', 'BONUS', 'INCENTIVE', 'ARREAR', 'REIMBURSEMENT')
+    )
+    adj_deductions = sum(
+        a.amount for a in adjustments
+        if a.adjustment_type in ('DEDUCTION', 'LOAN', 'OTHER')
+    )
+
+    base_gross = salary_data.gross_earnings if salary_data else Decimal('0')
+    base_deductions = salary_data.total_deductions if salary_data else Decimal('0')
+    base_net = salary_data.net_pay if salary_data else Decimal('0')
+
+    preview_gross = base_gross + adj_earnings
+    preview_deductions = base_deductions + adj_deductions
+    preview_net = preview_gross - preview_deductions
+
+    return Response({
+        'success': True,
+        'employee': {'id': employee.id, 'name': employee.name, 'employee_id': employee.employee_id},
+        'month': month,
+        'year': int(year),
+        'salary_type': salary_type,
+        'has_salary_data': salary_data is not None,
+        'base_gross': float(base_gross),
+        'base_deductions': float(base_deductions),
+        'base_net': float(base_net),
+        'adjustment_earnings': float(adj_earnings),
+        'adjustment_deductions': float(adj_deductions),
+        'preview_gross': float(preview_gross),
+        'preview_deductions': float(preview_deductions),
+        'preview_net': float(preview_net),
+        'adjustments': PayrollInputAdjustmentSerializer(adjustments, many=True).data,
+    })
