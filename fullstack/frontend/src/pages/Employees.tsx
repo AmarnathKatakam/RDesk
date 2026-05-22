@@ -26,6 +26,7 @@ interface EmployeeRow {
   employee_id: string;
   name: string;
   email?: string;
+  personal_email?: string;
   doj?: string;
   department?: { id: number; department_name: string } | null;
   shift?: { id: number; name: string } | null;
@@ -37,6 +38,13 @@ interface EmployeeRow {
   onboarding_completed?: boolean;
   position?: string;
   pay_mode?: string;
+  dob?: string;
+  pan?: string;
+  pf_number?: string | null;
+  bank_account?: string;
+  bank_ifsc?: string;
+  health_card_no?: string | null;
+  lpa?: string | number | null;
 }
 
 type EmployeeFormState = Record<string, string>;
@@ -51,14 +59,24 @@ const initialForm: EmployeeFormState = {
   employee_id: '',
   name: '',
   email: '',
+  personal_email: '',
   position: '',
   department_id: '',
   shift_id: '',
+  dob: '',
   doj: '',
+  pan: '',
+  pf_number: '',
+  bank_account: '',
+  bank_ifsc: '',
+  pay_mode: 'NEFT',
+  health_card_no: '',
+  lpa: '',
   location: '',
 };
 
 const locationOptions = ['Hyderabad', 'Bangalore', 'Chennai', 'Mumbai', 'Pune', 'Remote'];
+const payModeOptions = ['NEFT', 'Bank Transfer', 'Cheque', 'Cash'];
 
 const normalizeList = <T,>(payload: any): T[] => {
   if (Array.isArray(payload)) return payload;
@@ -67,29 +85,60 @@ const normalizeList = <T,>(payload: any): T[] => {
   return [];
 };
 
+const humanizeFieldName = (field: string): string =>
+  field
+    .replace(/^non_field_errors$/, 'Form')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
+const flattenValidationErrors = (errors: any, prefix = ''): string[] => {
+  if (!errors) return [];
+
+  if (Array.isArray(errors)) {
+    return errors.flatMap((item) => flattenValidationErrors(item, prefix));
+  }
+
+  if (typeof errors === 'object') {
+    return Object.entries(errors).flatMap(([field, value]) => {
+      const fieldName = prefix ? `${prefix}.${field}` : field;
+      return flattenValidationErrors(value, fieldName);
+    });
+  }
+
+  const label = prefix ? `${humanizeFieldName(prefix)}: ` : '';
+  return [`${label}${String(errors)}`];
+};
+
 const getSaveEmployeeErrorMessage = (error: any): string => {
   const payload = error?.response?.data;
+  const status = error?.response?.status;
+  const statusText = error?.response?.statusText;
+
   if (!payload) {
-    return 'Unable to save employee. Please check all required fields.';
+    const statusLabel = status ? `HTTP ${status}${statusText ? ` ${statusText}` : ''}` : '';
+    return [statusLabel, error?.message, 'No JSON error body was returned by the API.'].filter(Boolean).join('\n');
+  }
+
+  if (typeof payload === 'string') {
+    const statusLabel = status ? `HTTP ${status}${statusText ? ` ${statusText}` : ''}` : 'API error';
+    return `${statusLabel}: ${payload}`;
+  }
+
+  const fieldErrors = flattenValidationErrors(payload.errors);
+  if (fieldErrors.length > 0) {
+    return `Employee validation failed:\n- ${fieldErrors.join('\n- ')}`;
+  }
+
+  if (typeof payload.detail === 'string' && payload.detail.trim()) {
+    const statusLabel = status ? `HTTP ${status}${statusText ? ` ${statusText}` : ''}` : 'API error';
+    return `${statusLabel}: ${payload.detail}`;
   }
 
   if (typeof payload.message === 'string' && payload.message.trim()) {
     return payload.message;
   }
 
-  const errors = payload.errors;
-  if (errors && typeof errors === 'object') {
-    const firstKey = Object.keys(errors)[0];
-    const firstValue = firstKey ? errors[firstKey] : null;
-    if (Array.isArray(firstValue) && firstValue.length > 0) {
-      return `${firstKey}: ${firstValue[0]}`;
-    }
-    if (typeof firstValue === 'string') {
-      return `${firstKey}: ${firstValue}`;
-    }
-  }
-
-  return 'Unable to save employee. Please check all required fields.';
+  return `Unable to save employee${status ? ` (HTTP ${status})` : ''}. Check browser console and backend logs for details.`;
 };
 
 const EmployeesPage: React.FC = () => {
@@ -219,9 +268,18 @@ const EmployeesPage: React.FC = () => {
       employee_id: employee.employee_id || '',
       name: employee.name || '',
       email: employee.email || '',
+      personal_email: employee.personal_email || '',
       position: employee.position || '',
       department_id: employee.department?.id ? String(employee.department.id) : '',
       shift_id: employee.shift?.id ? String(employee.shift.id) : '',
+      dob: employee.dob || '',
+      pan: employee.pan || '',
+      pf_number: employee.pf_number || '',
+      bank_account: employee.bank_account || '',
+      bank_ifsc: employee.bank_ifsc || '',
+      pay_mode: employee.pay_mode || 'NEFT',
+      health_card_no: employee.health_card_no || '',
+      lpa: employee.lpa !== null && employee.lpa !== undefined ? String(employee.lpa) : '',
       location: employee.location || '',
       doj: employee.doj || '',
     });
@@ -293,6 +351,9 @@ const EmployeesPage: React.FC = () => {
     try {
       const normalizedEmployeeId = formData.employee_id.trim().toUpperCase();
       const normalizedEmail = formData.email.trim().toLowerCase();
+      const normalizedPersonalEmail = formData.personal_email.trim().toLowerCase();
+      const normalizedPan = formData.pan.trim().toUpperCase();
+      const normalizedBankIfsc = formData.bank_ifsc.trim().toUpperCase();
 
       if (!/^[A-Z0-9]+$/.test(normalizedEmployeeId)) {
         alert('Employee ID must contain only uppercase letters and numbers.');
@@ -301,6 +362,18 @@ const EmployeesPage: React.FC = () => {
 
       if (!normalizedEmail.endsWith('@blackroth.in')) {
         alert('Official email must end with @blackroth.in');
+        return;
+      }
+      if (!normalizedPersonalEmail) {
+        alert('Personal email is required.');
+        return;
+      }
+      if (normalizedPan && !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(normalizedPan)) {
+        alert('PAN must be in format ABCDE1234F.');
+        return;
+      }
+      if (normalizedBankIfsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(normalizedBankIfsc)) {
+        alert('IFSC must be in format ABCD0123456.');
         return;
       }
       if (!formData.department_id) {
@@ -326,12 +399,23 @@ const EmployeesPage: React.FC = () => {
         employee_id: normalizedEmployeeId,
         name: formData.name.trim(),
         email: normalizedEmail,
+        personal_email: normalizedPersonalEmail,
         position: formData.position.trim() || 'Employee',
         department_id: Number(formData.department_id),
         shift_id: Number(formData.shift_id),
+        dob: formData.dob || null,
         location: formData.location.trim(),
         doj: formData.doj,
+        pan: normalizedPan,
+        pf_number: formData.pf_number.trim(),
+        bank_account: formData.bank_account.trim(),
+        bank_ifsc: normalizedBankIfsc,
+        pay_mode: formData.pay_mode || 'NEFT',
+        health_card_no: formData.health_card_no.trim(),
+        lpa: formData.lpa ? Number(formData.lpa) : null,
       };
+
+      console.info('Create/Update employee payload:', payload);
 
       if (isEditing && activeEmployeeId) {
         await employeeAPI.update(String(activeEmployeeId), payload);
@@ -345,7 +429,10 @@ const EmployeesPage: React.FC = () => {
       await loadData();
     } catch (error) {
       console.error('Failed to save employee:', error);
-      alert(getSaveEmployeeErrorMessage(error));
+      console.error('Employee save API response:', (error as any)?.response?.data);
+      const message = getSaveEmployeeErrorMessage(error);
+      setToastState({ type: 'error', message });
+      alert(message);
     }
   };
 
@@ -669,6 +756,19 @@ const EmployeesPage: React.FC = () => {
               />
             </div>
             <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Personal Email</label>
+              <input
+                type="email"
+                value={formData.personal_email || ''}
+                onChange={(event) =>
+                  setFormData((prev) => ({ ...prev, personal_email: event.target.value }))
+                }
+                className="w-full h-10 rounded-xl border border-slate-200 px-3 text-sm"
+                placeholder="personal@example.com"
+                required
+              />
+            </div>
+            <div className="space-y-1">
               <label className="text-xs font-medium text-slate-600">Position</label>
               <input
                 type="text"
@@ -679,6 +779,17 @@ const EmployeesPage: React.FC = () => {
                 className="w-full h-10 rounded-xl border border-slate-200 px-3 text-sm"
                 placeholder="Employee"
                 required
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Date of Birth</label>
+              <input
+                type="date"
+                value={formData.dob || ''}
+                onChange={(event) =>
+                  setFormData((prev) => ({ ...prev, dob: event.target.value }))
+                }
+                className="w-full h-10 rounded-xl border border-slate-200 px-3 text-sm"
               />
             </div>
             <div className="space-y-1">
@@ -745,6 +856,96 @@ const EmployeesPage: React.FC = () => {
                 }
                 className="w-full h-10 rounded-xl border border-slate-200 px-3 text-sm"
                 required
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">PAN</label>
+              <input
+                type="text"
+                value={formData.pan || ''}
+                onChange={(event) =>
+                  setFormData((prev) => ({ ...prev, pan: event.target.value }))
+                }
+                className="w-full h-10 rounded-xl border border-slate-200 px-3 text-sm uppercase"
+                placeholder="ABCDE1234F"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">PF Number</label>
+              <input
+                type="text"
+                value={formData.pf_number || ''}
+                onChange={(event) =>
+                  setFormData((prev) => ({ ...prev, pf_number: event.target.value }))
+                }
+                className="w-full h-10 rounded-xl border border-slate-200 px-3 text-sm"
+                placeholder="PF account number"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Bank Account</label>
+              <input
+                type="text"
+                value={formData.bank_account || ''}
+                onChange={(event) =>
+                  setFormData((prev) => ({ ...prev, bank_account: event.target.value }))
+                }
+                className="w-full h-10 rounded-xl border border-slate-200 px-3 text-sm"
+                placeholder="Account number"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Bank IFSC</label>
+              <input
+                type="text"
+                value={formData.bank_ifsc || ''}
+                onChange={(event) =>
+                  setFormData((prev) => ({ ...prev, bank_ifsc: event.target.value }))
+                }
+                className="w-full h-10 rounded-xl border border-slate-200 px-3 text-sm uppercase"
+                placeholder="ABCD0123456"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Pay Mode</label>
+              <select
+                value={formData.pay_mode || 'NEFT'}
+                onChange={(event) =>
+                  setFormData((prev) => ({ ...prev, pay_mode: event.target.value }))
+                }
+                className="w-full h-10 rounded-xl border border-slate-200 px-3 text-sm bg-white"
+              >
+                {payModeOptions.map((payMode) => (
+                  <option key={payMode} value={payMode}>
+                    {payMode}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Health Card No</label>
+              <input
+                type="text"
+                value={formData.health_card_no || ''}
+                onChange={(event) =>
+                  setFormData((prev) => ({ ...prev, health_card_no: event.target.value }))
+                }
+                className="w-full h-10 rounded-xl border border-slate-200 px-3 text-sm"
+                placeholder="Optional"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">LPA</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={formData.lpa || ''}
+                onChange={(event) =>
+                  setFormData((prev) => ({ ...prev, lpa: event.target.value }))
+                }
+                className="w-full h-10 rounded-xl border border-slate-200 px-3 text-sm"
+                placeholder="4.50"
               />
             </div>
           </div>

@@ -104,15 +104,10 @@ WSGI_APPLICATION = "rothdesk_payslip.wsgi.application"
 # Credentials come from .env so they are never hard-coded here
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.mysql",
-        "NAME":     config("DB_NAME",     default="rothdesk_payslip"),
-        "USER":     config("DB_USER",     default="root"),
-        "PASSWORD": config("DB_PASSWORD", default=""),
-        "HOST":     config("DB_HOST",     default="localhost"),
-        "PORT":     config("DB_PORT",     default="3306"),
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "db.sqlite3",
     }
 }
-
 # ---------------------------------------------------------------------------
 # Custom User Model
 # ---------------------------------------------------------------------------
@@ -152,7 +147,7 @@ MEDIA_ROOT = os.path.join(BASE_DIR, "media")           # uploaded files (docs, p
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework_simplejwt.authentication.JWTAuthentication",  # Admin/HR — JWT tokens
-        "rest_framework.authentication.SessionAuthentication",         # Employees — session cookies
+        "rothdesk_payslip.authentication.CSRFExemptSessionAuthentication",  # Employees/session cookies without API CSRF blocking
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",   # All endpoints require login by default
@@ -266,6 +261,11 @@ LOGGING = {
         },
         # Payslip generation has its own logger for payroll audit trails
         "payslip_generation": {
+            "handlers": ["file", "console"],
+            "level": "INFO",
+            "propagate": True,
+        },
+        "employees": {
             "handlers": ["file", "console"],
             "level": "INFO",
             "propagate": True,

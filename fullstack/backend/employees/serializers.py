@@ -168,9 +168,6 @@ class EmployeeSerializer(serializers.ModelSerializer):
         if self.instance is None:
             required_fields = ['employee_id', 'name', 'email', 'location', 'doj']
             missing = [field for field in required_fields if not attrs.get(field)]
-            # personal_email is required on create so invitation can be delivered
-            if not (attrs.get('personal_email') or '').strip():
-                missing.append('personal_email')
             if missing:
                 raise serializers.ValidationError({
                     field: ["This field is required."]

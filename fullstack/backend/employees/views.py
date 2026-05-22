@@ -29,6 +29,9 @@ from .serializers import (
 from departments.models import Department
 
 
+logger = logging.getLogger('employees')
+
+
 def _resolve_admin_role(user):
     """Mirror frontend role expectations from group/username."""
     group_names = {group.name.lower() for group in user.groups.all()}
@@ -275,11 +278,22 @@ class EmployeeListCreateView(generics.ListCreateAPIView):
         """
         Return clean serializer validation payload for frontend handling.
         """
+        logger.info(
+            "Employee create request by user=%s payload=%s",
+            getattr(request.user, 'username', 'unknown'),
+            dict(request.data),
+        )
         serializer = self.get_serializer(data=request.data)
         if not serializer.is_valid():
+            logger.warning(
+                "Employee create validation failed by user=%s errors=%s payload=%s",
+                getattr(request.user, 'username', 'unknown'),
+                serializer.errors,
+                dict(request.data),
+            )
             return Response({
                 'success': False,
-                'message': 'Validation failed',
+                'message': 'Employee validation failed. Please check the highlighted field errors.',
                 'errors': serializer.errors
             }, status=status.HTTP_400_BAD_REQUEST)
 
