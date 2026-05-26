@@ -702,8 +702,14 @@ def transition_run(
         run.released_by = performed_by
         run.released_at = now
         update_fields += ['released_by', 'released_at']
-        # Release payslips BEFORE saving run status so any failure rolls back
-        _release_run_payslips(run, performed_by)
+        # Fire async Celery task — PDF generation happens in background.
+        # Frontend polls /api/payroll/runs/<id>/release-progress/ for progress.
+        from .tasks import release_run_payslips_task
+        performed_by_pk = getattr(performed_by, 'pk', None)
+        # Save run status first so the task can read it
+        run.save(update_fields=update_fields)
+        update_fields = []  # already saved — skip the final save below
+        release_run_payslips_task.delay(run.id, performed_by_pk)
     elif new_status == 'PAID':
         run.completed_at = now
         update_fields.append('completed_at')

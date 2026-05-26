@@ -123,7 +123,6 @@ urlpatterns += [
 # ---------------------------------------------------------------------------
 # Development Media & Static Serving
 # ---------------------------------------------------------------------------
-# In production, Nginx/Apache should serve /media/ and /static/ directly.
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL,  document_root=settings.MEDIA_ROOT)
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

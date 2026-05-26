@@ -27,7 +27,6 @@ else:
 # ---------------------------------------------------------------------------
 SECRET_KEY = config("SECRET_KEY", default="django-insecure-placeholder")
 
-# Set DEBUG=False in production
 DEBUG = str(config("DEBUG", default="True")).strip().lower() in ("true", "1", "yes", "on")
 
 # Comma-separated list of allowed hostnames (e.g. "localhost,myserver.com")
@@ -160,12 +159,21 @@ REST_FRAMEWORK = {
         "rest_framework.parsers.FormParser",
         "rest_framework.parsers.MultiPartParser",   # Required for file uploads
     ],
+    # Rate limiting — protects download and API endpoints from abuse
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "20/minute",
+        "user": "200/minute",
+        "payslip_download": "30/minute",   # scoped throttle for download_payslip view
+    },
 }
 
 # ---------------------------------------------------------------------------
 # CORS & CSRF
 # ---------------------------------------------------------------------------
-# Allow all origins in development; tighten in production
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True   # Required for session-based employee auth
 
@@ -175,7 +183,7 @@ CSRF_TRUSTED_ORIGINS = config(
     default="http://localhost:3000,http://localhost:5173",
     cast=lambda v: [s.strip() for s in v.split(",")],
 )
-CSRF_COOKIE_SECURE = False      # Set True in production (HTTPS only)
+CSRF_COOKIE_SECURE = False
 CSRF_COOKIE_HTTPONLY = False    # Frontend JS needs to read the CSRF cookie
 
 # ---------------------------------------------------------------------------

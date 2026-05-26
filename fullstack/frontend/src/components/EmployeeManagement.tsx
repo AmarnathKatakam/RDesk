@@ -1008,8 +1008,15 @@ const EmployeeManagement: React.FC<EmployeeManagementProps> = ({ onNavigateToUpl
                     <input
                       type="checkbox"
                       id="send-welcome-email"
+                      aria-label="Send welcome email"
                       checked={sendWelcomeEmail}
-                      onChange={e => setSendWelcomeEmail(e.target.checked)}
+                      onChange={e => {
+                        const checked = e.target.checked;
+                        setSendWelcomeEmail(checked);
+                        if (!checked) {
+                          setEmployeeForm(prev => ({...prev, password: ''}));
+                        }
+                      }}
                     />
                     <Label htmlFor="send-welcome-email">Send welcome email with login credentials</Label>
                   </div>
@@ -1421,6 +1428,10 @@ const EmployeeManagement: React.FC<EmployeeManagementProps> = ({ onNavigateToUpl
                     <input
                       type="checkbox"
                       id="send-welcome-email-edit"
+                      name="sendWelcomeEmail"
+                      className="form-checkbox h-4 w-4"
+                      title="Send welcome email with login credentials"
+                      aria-label="Send welcome email with login credentials"
                       checked={sendWelcomeEmail}
                       onChange={e => setSendWelcomeEmail(e.target.checked)}
                     />

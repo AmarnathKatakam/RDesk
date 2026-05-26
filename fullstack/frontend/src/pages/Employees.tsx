@@ -268,7 +268,7 @@ const EmployeesPage: React.FC = () => {
       employee_id: employee.employee_id || '',
       name: employee.name || '',
       email: employee.email || '',
-      personal_email: employee.personal_email || '',
+      personal_email: employee.personal_email || employee.email || '',
       position: employee.position || '',
       department_id: employee.department?.id ? String(employee.department.id) : '',
       shift_id: employee.shift?.id ? String(employee.shift.id) : '',
@@ -574,26 +574,27 @@ const EmployeesPage: React.FC = () => {
       header: 'Actions',
       render: (row) => (
         <div className="flex flex-wrap gap-1.5">
-          <button onClick={() => navigate(`/admin/employees/${row.id}`)} className="h-8 px-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50">
+          <button onClick={() => navigate(`/admin/employees/${row.id}`)} title="View" aria-label={`View ${row.name}`} className="h-8 px-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50">
             <Eye className="h-4 w-4" />
           </button>
-          <button onClick={() => openEditForm(row)} className="h-8 px-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50">
+          <button onClick={() => openEditForm(row)} title="Edit" aria-label={`Edit ${row.name}`} className="h-8 px-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50">
             <Pencil className="h-4 w-4" />
           </button>
           <button
             onClick={() => openPasswordModal(row)}
             className="h-8 px-2 rounded-lg border border-amber-200 text-amber-700 hover:bg-amber-50"
-            title="Regenerate Password"
+            title="Regenerate password"
+            aria-label={`Regenerate password for ${row.name}`}
           >
             <KeyRound className="h-4 w-4" />
           </button>
-          <button onClick={() => void sendInvitation(row.id)} className="h-8 px-2 rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50">
+          <button onClick={() => void sendInvitation(row.id)} title="Send invite" aria-label={`Send invite to ${row.name}`} className="h-8 px-2 rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50">
             <Send className="h-4 w-4" />
           </button>
-          <button onClick={() => void releasePayslip(row.id)} className="h-8 px-2 rounded-lg border border-indigo-200 text-indigo-700 hover:bg-indigo-50">
+          <button onClick={() => void releasePayslip(row.id)} title="Release payslip" aria-label={`Release payslip for ${row.name}`} className="h-8 px-2 rounded-lg border border-indigo-200 text-indigo-700 hover:bg-indigo-50">
             <FileText className="h-4 w-4" />
           </button>
-          <button onClick={() => void deleteEmployee(row.id)} className="h-8 px-2 rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50">
+          <button onClick={() => void deleteEmployee(row.id)} title="Delete employee" aria-label={`Delete ${row.name}`} className="h-8 px-2 rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50">
             <Trash2 className="h-4 w-4" />
           </button>
         </div>
@@ -644,11 +645,13 @@ const EmployeesPage: React.FC = () => {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search employees"
+            aria-label="Search employees"
             className="h-10 rounded-xl border border-slate-200 px-3 text-sm"
           />
           <select
             value={departmentFilter}
             onChange={(event) => setDepartmentFilter(event.target.value)}
+            aria-label="Filter by department"
             className="h-10 rounded-xl border border-slate-200 px-3 text-sm bg-white"
           >
             <option value="">All departments</option>
@@ -661,6 +664,7 @@ const EmployeesPage: React.FC = () => {
           <select
             value={locationFilter}
             onChange={(event) => setLocationFilter(event.target.value)}
+            aria-label="Filter by location"
             className="h-10 rounded-xl border border-slate-200 px-3 text-sm bg-white"
           >
             <option value="">All locations</option>
@@ -782,8 +786,9 @@ const EmployeesPage: React.FC = () => {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Date of Birth</label>
+              <label htmlFor="dob" className="text-xs font-medium text-slate-600">Date of Birth</label>
               <input
+                id="dob"
                 type="date"
                 value={formData.dob || ''}
                 onChange={(event) =>
@@ -793,8 +798,9 @@ const EmployeesPage: React.FC = () => {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Department</label>
+              <label htmlFor="department" className="text-xs font-medium text-slate-600">Department</label>
               <select
+                id="department"
                 value={formData.department_id || ''}
                 onChange={(event) =>
                   setFormData((prev) => ({ ...prev, department_id: event.target.value }))
@@ -811,8 +817,9 @@ const EmployeesPage: React.FC = () => {
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Shift</label>
+              <label htmlFor="shift" className="text-xs font-medium text-slate-600">Shift</label>
               <select
+                id="shift"
                 value={formData.shift_id || ''}
                 onChange={(event) =>
                   setFormData((prev) => ({ ...prev, shift_id: event.target.value }))
@@ -829,8 +836,9 @@ const EmployeesPage: React.FC = () => {
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Location</label>
+              <label htmlFor="location" className="text-xs font-medium text-slate-600">Location</label>
               <select
+                id="location"
                 value={formData.location || ''}
                 onChange={(event) =>
                   setFormData((prev) => ({ ...prev, location: event.target.value }))
@@ -847,8 +855,9 @@ const EmployeesPage: React.FC = () => {
               </select>
             </div>
             <div className="space-y-1 md:col-span-2">
-              <label className="text-xs font-medium text-slate-600">Date of Joining</label>
+              <label htmlFor="doj" className="text-xs font-medium text-slate-600">Date of Joining</label>
               <input
+                id="doj"
                 type="date"
                 value={formData.doj || ''}
                 onChange={(event) =>
@@ -859,8 +868,9 @@ const EmployeesPage: React.FC = () => {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">PAN</label>
+              <label htmlFor="pan" className="text-xs font-medium text-slate-600">PAN</label>
               <input
+                id="pan"
                 type="text"
                 value={formData.pan || ''}
                 onChange={(event) =>
@@ -871,8 +881,9 @@ const EmployeesPage: React.FC = () => {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">PF Number</label>
+              <label htmlFor="pf_number" className="text-xs font-medium text-slate-600">PF Number</label>
               <input
+                id="pf_number"
                 type="text"
                 value={formData.pf_number || ''}
                 onChange={(event) =>
@@ -883,8 +894,9 @@ const EmployeesPage: React.FC = () => {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Bank Account</label>
+              <label htmlFor="bank_account" className="text-xs font-medium text-slate-600">Bank Account</label>
               <input
+                id="bank_account"
                 type="text"
                 value={formData.bank_account || ''}
                 onChange={(event) =>
@@ -895,8 +907,9 @@ const EmployeesPage: React.FC = () => {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Bank IFSC</label>
+              <label htmlFor="bank_ifsc" className="text-xs font-medium text-slate-600">Bank IFSC</label>
               <input
+                id="bank_ifsc"
                 type="text"
                 value={formData.bank_ifsc || ''}
                 onChange={(event) =>
@@ -907,8 +920,9 @@ const EmployeesPage: React.FC = () => {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Pay Mode</label>
+              <label htmlFor="pay_mode" className="text-xs font-medium text-slate-600">Pay Mode</label>
               <select
+                id="pay_mode"
                 value={formData.pay_mode || 'NEFT'}
                 onChange={(event) =>
                   setFormData((prev) => ({ ...prev, pay_mode: event.target.value }))

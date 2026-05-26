@@ -24,10 +24,7 @@ urlpatterns = [
     path('employee/sign-out/', employee_views.sign_out_view, name='sign_out'),
     path('employee/attendance/', employee_views.attendance_history_view, name='attendance_history'),
     path('employee/dashboard/', employee_views.employee_dashboard_view, name='employee_dashboard'),
-
-
-    
-    # Admin invitation and payslip endpoints
+    path('employee/ytd/', employee_views.employee_ytd_view, name='employee_ytd'),
     path('employee/send-invitation/', employee_views.send_invitation_view, name='send_invitation'),
     path('employee/release-payslip/', employee_views.release_payslip_view, name='release_payslip'),
     path('employee/bulk-release-payslips/', employee_views.bulk_release_payslips_view, name='bulk_release_payslips'),

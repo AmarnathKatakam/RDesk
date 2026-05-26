@@ -365,14 +365,6 @@ def punch_in(
     now = timezone.now()
     local_now = timezone.localtime(now)
 
-    # Check configuration before proceeding
-    config_warning = get_configuration_warning_message()
-    if config_warning:
-        raise AttendanceServiceError(
-            f"Attendance system not fully configured. {config_warning}",
-            status_code=400
-        )
-
     if has_approved_leave(employee, today):
         raise AttendanceServiceError("Cannot punch in on an approved leave day.", status_code=409)
 
@@ -454,14 +446,6 @@ def punch_out(
 ) -> tuple[AttendanceRecord, dict[str, Any]]:
     today = timezone.localdate()
     now = timezone.now()
-
-    # Check configuration before proceeding
-    config_warning = get_configuration_warning_message()
-    if config_warning:
-        raise AttendanceServiceError(
-            f"Attendance system not fully configured. {config_warning}",
-            status_code=400
-        )
 
     assignment = get_active_assignment(employee, today)
     if not assignment or not assignment.shift or not assignment.shift.is_active:

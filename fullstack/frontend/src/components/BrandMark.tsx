@@ -3,6 +3,7 @@ import React from 'react';
 interface BrandMarkProps {
   className?: string;
   compact?: boolean;
+  onIconClick?: () => void;
 }
 
 const BrandMark: React.FC<BrandMarkProps> = ({ className = '', compact = false }) => {

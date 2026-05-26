@@ -13,7 +13,7 @@ from django.core.mail import send_mail
 from django.conf import settings
 
 from employees.models import Employee, EmployeeInvitation, EmployeeProfile, EmployeeAttendance, LeaveRequest, LeaveType
-from payslip_generation.models import Payslip
+from payslip_generation.models import Payslip, PayrollRunItem, PayrollRunItemLine
 from attendance.models import AttendanceRecord, Holiday
 from attendance.services import generate_monthly_summary
 
@@ -23,6 +23,15 @@ class IsAuthenticatedOrEmployeeSession(BasePermission):
         if request.user and request.user.is_authenticated:
             return True
         if request.session and request.session.get('employee_id'):
+            return True
+        return False
+
+
+class IsAuthenticatedOrAdminSession(BasePermission):
+    def has_permission(self, request, view):
+        if request.user and request.user.is_authenticated:
+            return True
+        if request.session and request.session.get('admin_id'):
             return True
         return False
 
@@ -186,7 +195,7 @@ def attendance_history_view(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticatedOrAdminSession])
 @csrf_exempt
 def send_invitation_view(request):
     if not _has_admin_access(request):
@@ -263,7 +272,7 @@ def send_invitation_view(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticatedOrAdminSession])
 @csrf_exempt
 def release_payslip_view(request):
     if not _has_admin_access(request):
@@ -424,7 +433,7 @@ def activate_account_view(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticatedOrEmployeeSession])
 @csrf_exempt
 def complete_onboarding_view(request):
     employee_id, error_response = _resolve_employee_id(request)
@@ -577,13 +586,21 @@ def update_employee_profile_view(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticatedOrAdminSession])
 @csrf_exempt
 def bulk_release_payslips_view(request):
-    employee_ids = request.data.get('employee_ids') or []
+    """
+    Bulk release payslips for a given month and year.
+
+    Request body may provide employee IDs using either `employee_ids`
+    or the admin UI-friendly alias `selected_employees`.
+    """
+    employee_ids = request.data.get('employee_ids') or request.data.get('selected_employees') or []
     month = request.data.get('month')
     year = request.data.get('year')
 
+    if isinstance(employee_ids, int):
+        employee_ids = [employee_ids]
     if not isinstance(employee_ids, list) or not employee_ids:
         return Response({
             'success': False,
@@ -821,5 +838,131 @@ def employee_dashboard_view(request):
                 'payable_days': monthly_summary.payable_days,
             }
         }
+    }, status=status.HTTP_200_OK)
+
+
+MONTH_NUMBER = {
+    'january': 1, 'february': 2, 'march': 3, 'april': 4,
+    'may': 5, 'june': 6, 'july': 7, 'august': 8,
+    'september': 9, 'october': 10, 'november': 11, 'december': 12,
+}
+
+
+def _get_employee_ytd_period() -> dict:
+    """Return the current fiscal year window from April to current month."""
+    today = timezone.localdate()
+    month_number = today.month
+    year = today.year
+
+    start_year = year if month_number >= 4 else year - 1
+    month_names = {v: k.capitalize() for k, v in MONTH_NUMBER.items()}
+    period = {
+        'start_month': month_names[4],
+        'start_year': start_year,
+        'end_month': month_names[month_number],
+        'end_year': year,
+        'months': 0,
+    }
+
+    current_month = 4
+    current_year = start_year
+    months = []
+    while True:
+        months.append((month_names[current_month], current_year))
+        period['months'] += 1
+        if current_month == month_number and current_year == year:
+            break
+        current_month += 1
+        if current_month > 12:
+            current_month = 1
+            current_year += 1
+
+    period['month_year_pairs'] = months
+    return period
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticatedOrEmployeeSession])
+def employee_ytd_view(request):
+    """
+    GET /api/auth/employee/ytd/
+    Returns current fiscal year YTD payroll summary for the logged-in employee.
+    """
+    employee_id, error_response = _resolve_employee_id(request)
+    if error_response:
+        return error_response
+
+    try:
+        employee = Employee.objects.get(id=employee_id, is_active=True)
+    except Employee.DoesNotExist:
+        return Response({
+            'success': False,
+            'message': 'Employee not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+
+    period = _get_employee_ytd_period()
+
+    months_by_year: dict[int, list[str]] = {}
+    for month_name, month_year in period['month_year_pairs']:
+        months_by_year.setdefault(month_year, []).append(month_name)
+
+    query = Q()
+    for month_year, month_names in months_by_year.items():
+        query |= Q(run__year=month_year, run__month__in=month_names)
+
+    items = (
+        PayrollRunItem.objects
+        .filter(query, employee=employee, status='INCLUDED')
+        .select_related('run')
+        .prefetch_related('lines')
+        .order_by('run__year', 'run__month')
+    )
+
+    ytd_gross = 0.0
+    ytd_deductions = 0.0
+    ytd_net = 0.0
+    ytd_pf_employee = 0.0
+    ytd_tds = 0.0
+    months_count = 0
+
+    monthly_breakdown = []
+    for item in items:
+        pf_employee = sum(float(line.amount) for line in item.lines.all() if line.code == 'PF_EMP')
+
+        monthly_breakdown.append({
+            'month': item.run.month,
+            'year': item.run.year,
+            'gross': float(item.gross_earnings),
+            'deductions': float(item.total_deductions),
+            'net': float(item.net_pay),
+            'pf_employee': pf_employee,
+            'tds': float(item.tds_amount),
+        })
+
+        ytd_gross += float(item.gross_earnings)
+        ytd_deductions += float(item.total_deductions)
+        ytd_net += float(item.net_pay)
+        ytd_pf_employee += pf_employee
+        ytd_tds += float(item.tds_amount)
+        months_count += 1
+
+    return Response({
+        'success': True,
+        'period': {
+            'start_month': period['start_month'],
+            'start_year': period['start_year'],
+            'end_month': period['end_month'],
+            'end_year': period['end_year'],
+            'months': period['months'],
+        },
+        'ytd_summary': {
+            'gross': round(ytd_gross, 2),
+            'deductions': round(ytd_deductions, 2),
+            'net': round(ytd_net, 2),
+            'pf_employee': round(ytd_pf_employee, 2),
+            'tds': round(ytd_tds, 2),
+            'months_count': months_count,
+        },
+        'monthly_breakdown': monthly_breakdown,
     }, status=status.HTTP_200_OK)
 

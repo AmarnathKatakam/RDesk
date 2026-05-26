@@ -80,6 +80,28 @@ def _round0(value: Decimal) -> Decimal:
     return value.quantize(Decimal('1'), rounding=ROUND_HALF_UP)
 
 
+def _eval_formula(formula: str, variables: dict) -> Decimal:
+    """
+    Safely evaluate a salary component formula string.
+
+    Available variables: any component code already computed (e.g. BASIC, HRA),
+    plus GROSS and CTC_MONTHLY.
+
+    Only arithmetic operations are permitted — builtins are stripped so
+    arbitrary code cannot be executed.
+
+    Returns ZERO on any evaluation error (logged as a warning).
+    """
+    try:
+        safe_globals: dict = {"__builtins__": {}}
+        float_vars = {k: float(v) for k, v in variables.items()}
+        result = eval(formula.strip(), safe_globals, float_vars)  # noqa: S307
+        return _round2(Decimal(str(result)))
+    except Exception as exc:
+        logger.warning("Formula eval failed — formula=%r variables=%s error=%s", formula, list(variables.keys()), exc)
+        return ZERO
+
+
 # ─── Core calculation ─────────────────────────────────────────────────────────
 
 def build_line_items_from_assignment(
@@ -184,8 +206,15 @@ def build_line_items_from_assignment(
         if calc_type == 'PERCENTAGE_OF_GROSS':
             pct = Decimal(str(value)) / Decimal('100')
             component_values[comp.code] = _round2(pre_gross * pct)
-        elif calc_type in ('STATUTORY', 'FORMULA'):
-            # Earnings that are statutory/formula — skip for now, handled below
+        elif calc_type == 'FORMULA' and comp.formula.strip():
+            formula_vars = {
+                **component_values,
+                'GROSS': pre_gross,
+                'CTC_MONTHLY': monthly_ctc,
+            }
+            component_values[comp.code] = _eval_formula(comp.formula, formula_vars)
+        elif calc_type == 'STATUTORY':
+            # Statutory earnings (rare) — handled by statutory engine below
             pass
         else:
             notes.append(f'Component {comp.code}: unsupported calc_type {calc_type} for EARNING — skipped.')
@@ -271,6 +300,13 @@ def build_line_items_from_assignment(
         elif calc_type == 'PERCENTAGE_OF_CTC':
             pct = Decimal(str(value)) / Decimal('100')
             amount = _round2(monthly_ctc * pct * proration_factor)
+        elif calc_type == 'FORMULA' and comp.formula.strip():
+            formula_vars = {
+                **component_values,
+                'GROSS': gross_earnings,
+                'CTC_MONTHLY': monthly_ctc,
+            }
+            amount = _eval_formula(comp.formula, formula_vars)
         else:
             notes.append(f'Deduction {comp.code}: unsupported calc_type {calc_type} — skipped.')
 

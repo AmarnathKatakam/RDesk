@@ -19,9 +19,10 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 
 from rest_framework import generics, status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated, BasePermission
 from rest_framework.response import Response
+from rest_framework.throttling import UserRateThrottle
 
 from employees.models import Employee, MonthlySalaryData
 
@@ -38,6 +39,13 @@ class IsAuthenticatedOrEmployeeSession(BasePermission):
         if request.session and request.session.get('employee_id'):
             return True
         return False
+
+
+class PayslipDownloadThrottle(UserRateThrottle):
+    """Scoped throttle for payslip downloads — 30 requests per minute per user."""
+    scope = 'payslip_download'
+
+
 from .tasks import generate_all_payslips
 from .utils import PayslipFileManager
 from .validation import issues_to_dict, persist_issues, run_payroll_validation
@@ -120,6 +128,7 @@ class PayslipDetailView(generics.RetrieveAPIView):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticatedOrEmployeeSession])
+@throttle_classes([PayslipDownloadThrottle])
 def download_payslip(request, payslip_id):
     """
     Secure payslip PDF download.

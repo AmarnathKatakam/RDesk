@@ -514,44 +514,44 @@ export default function MonthlyInputs() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Basic</label>
-                  <input type="number" value={addSalaryForm.basic || ''} onChange={e => setAddSalaryForm(p => ({ ...p, basic: Number(e.target.value) || 0 }))}
+                  <input type="number" value={addSalaryForm.basic || ''} onChange={e => setAddSalaryForm(p => ({ ...p, basic: e.target.value }))}
                     className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">HRA</label>
-                  <input type="number" value={addSalaryForm.hra || ''} onChange={e => setAddSalaryForm(p => ({ ...p, hra: Number(e.target.value) || 0 }))}
+                  <input type="number" value={addSalaryForm.hra || ''} onChange={e => setAddSalaryForm(p => ({ ...p, hra: e.target.value }))}
                     className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">DA</label>
-                  <input type="number" value={addSalaryForm.da || ''} onChange={e => setAddSalaryForm(p => ({ ...p, da: Number(e.target.value) || 0 }))}
+                  <input type="number" value={addSalaryForm.da || ''} onChange={e => setAddSalaryForm(p => ({ ...p, da: e.target.value }))}
                     className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Conveyance</label>
-                  <input type="number" value={addSalaryForm.conveyance || ''} onChange={e => setAddSalaryForm(p => ({ ...p, conveyance: Number(e.target.value) || 0 }))}
+                  <input type="number" value={addSalaryForm.conveyance || ''} onChange={e => setAddSalaryForm(p => ({ ...p, conveyance: e.target.value }))}
                     className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Medical</label>
-                  <input type="number" value={addSalaryForm.medical || ''} onChange={e => setAddSalaryForm(p => ({ ...p, medical: Number(e.target.value) || 0 }))}
+                  <input type="number" value={addSalaryForm.medical || ''} onChange={e => setAddSalaryForm(p => ({ ...p, medical: e.target.value }))}
                     className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Special Allowance</label>
-                  <input type="number" value={addSalaryForm.special_allowance || ''} onChange={e => setAddSalaryForm(p => ({ ...p, special_allowance: Number(e.target.value) || 0 }))}
+                  <input type="number" value={addSalaryForm.special_allowance || ''} onChange={e => setAddSalaryForm(p => ({ ...p, special_allowance: e.target.value }))}
                     className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
                 </div>
 
                 {/* Deductions */}
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">PF (Employee)</label>
-                  <input type="number" value={addSalaryForm.pf_employee || ''} onChange={e => setAddSalaryForm(p => ({ ...p, pf_employee: Number(e.target.value) || 0 }))}
+                  <input type="number" value={addSalaryForm.pf_employee || ''} onChange={e => setAddSalaryForm(p => ({ ...p, pf_employee: e.target.value }))}
                     className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Professional Tax</label>
-                  <input type="number" value={addSalaryForm.professional_tax || ''} onChange={e => setAddSalaryForm(p => ({ ...p, professional_tax: Number(e.target.value) || 0 }))}
+                  <input type="number" value={addSalaryForm.professional_tax || ''} onChange={e => setAddSalaryForm(p => ({ ...p, professional_tax: e.target.value }))}
                     className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
                 </div>
 

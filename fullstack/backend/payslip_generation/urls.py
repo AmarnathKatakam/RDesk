@@ -18,6 +18,8 @@ urlpatterns = [
     path('payroll/runs/<int:run_id>/hold/', payroll_views.payroll_run_hold, name='payroll-run-hold'),
     path('payroll/runs/<int:run_id>/release-hold/', payroll_views.payroll_run_release_hold, name='payroll-run-release-hold'),
     path('payroll/runs/<int:run_id>/reprocess/', payroll_views.payroll_run_reprocess, name='payroll-run-reprocess'),
+    path('payroll/runs/<int:run_id>/release-employee/', payroll_views.payroll_run_release_employee, name='payroll-run-release-employee'),
+    path('payroll/runs/<int:run_id>/release-progress/', payroll_views.payroll_run_release_progress, name='payroll-run-release-progress'),
     path('payroll/runs/<int:run_id>/summary/', payroll_views.payroll_run_summary, name='payroll-run-summary'),
 
     # ── Milestone 4: Payroll Reports ──────────────────────────────────────────
@@ -27,6 +29,7 @@ urlpatterns = [
     path('payroll/reports/bank-transfer/export/', report_views.bank_transfer_export, name='bank-transfer-export'),
     path('payroll/reports/department-summary/', report_views.department_summary, name='department-summary'),
     path('payroll/reports/variance/', report_views.variance_report, name='variance-report'),
+    path('payroll/reports/ytd/', report_views.ytd_report, name='payroll-ytd-report'),
 
     # Payslip list / detail (admin)
     path('payslips/', views.PayslipListView.as_view(), name='payslip-list'),

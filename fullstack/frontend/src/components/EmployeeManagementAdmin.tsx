@@ -313,6 +313,7 @@ const EmployeeManagementAdmin: React.FC = () => {
                     <Label htmlFor="location">Location *</Label>
                     <select
                       id="location"
+                      aria-label="Location"
                       value={newEmployeeForm.location}
                       onChange={(e) => setNewEmployeeForm({...newEmployeeForm, location: e.target.value})}
                       disabled={isLoading}
@@ -360,6 +361,7 @@ const EmployeeManagementAdmin: React.FC = () => {
                   <Label htmlFor="month">Month *</Label>
                   <select
                     id="month"
+                    aria-label="Month"
                     value={releaseForm.month}
                     onChange={(e) => setReleaseForm({...releaseForm, month: e.target.value})}
                     disabled={isLoading}

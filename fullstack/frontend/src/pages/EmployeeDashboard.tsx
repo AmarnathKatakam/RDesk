@@ -4,6 +4,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
 import { Clock, CalendarDays, Users, Award, FileText, Clock3, LogIn, LogOut as LogOutIcon, Timer, Upload } from 'lucide-react';
 type AttendanceStatus = 'PRESENT' | 'LATE' | 'HALF_DAY' | 'ABSENT' | 'LEAVE' | 'HOLIDAY' | 'WEEK_OFF' | 'NOT_MARKED';
 
@@ -25,7 +26,6 @@ const toFixedHours = (value: unknown) => {
   return Number.isFinite(parsed) ? parsed.toFixed(2) : '0.00';
 };
 import { attendanceAPI } from '@/services/api';
-import { Button } from '@/components/ui/button';
 import StatCard from '@/components/StatCard';
 import { format } from 'date-fns';
 
@@ -122,6 +122,7 @@ const EmployeeDashboardPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [actionLoading, setActionLoading] = useState<'IN' | 'OUT' | null>(null);
+  const [ytdData, setYtdData] = useState<any>(null);
 
   // Live clock
   useEffect(() => {
@@ -139,13 +140,15 @@ const EmployeeDashboardPage: React.FC = () => {
         const userId = localStorage.getItem('userId');
         if (!userId) return;
 
-        const [dashboardRes, todayRes] = await Promise.all([
+        const [dashboardRes, todayRes, ytdRes] = await Promise.all([
           attendanceAPI.getEmployeeDashboard(userId),
-          attendanceAPI.getToday(userId)
+          attendanceAPI.getToday(userId),
+          attendanceAPI.getEmployeeYTD()
         ]);
 
         setDashboardData(dashboardRes.data);
         setTodayAttendance(todayRes.data?.data);
+        setYtdData(ytdRes.data);
       } catch (error) {
         console.error('Dashboard load error:', error);
       } finally {
@@ -360,6 +363,7 @@ const EmployeeDashboardPage: React.FC = () => {
               )}
             </div>
           </div>
+
         </div>
 
         {/* Attendance Section */}

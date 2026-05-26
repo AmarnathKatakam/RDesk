@@ -585,3 +585,153 @@ def variance_report(request):
         'new_employees': new_count,
         'rows': variance_rows,
     })
+
+
+def _get_ytd_period(month: str, year: int) -> Optional[dict]:
+    """Return the fiscal year window from April to the requested month."""
+    month_number = MONTH_NUMBER.get(month.lower())
+    if not month_number:
+        return None
+
+    start_year = year if month_number >= 4 else year - 1
+    month_names = {v: k.capitalize() for k, v in MONTH_NUMBER.items()}
+    period = {
+        'start_month': month_names[4],
+        'start_year': start_year,
+        'end_month': month_names[month_number],
+        'end_year': year,
+        'months': 0,
+    }
+
+    current_month = 4
+    current_year = start_year
+    months = []
+    while True:
+        months.append((month_names[current_month], current_year))
+        period['months'] += 1
+        if current_month == month_number and current_year == year:
+            break
+        current_month += 1
+        if current_month > 12:
+            current_month = 1
+            current_year += 1
+
+    period['month_year_pairs'] = months
+    return period
+
+
+def _get_ytd_rows(month: str, year: int, salary_type: str) -> tuple[list[dict], dict]:
+    period = _get_ytd_period(month, year)
+    if period is None:
+        return [], {}
+
+    months_by_year: dict[int, list[str]] = {}
+    for month_name, month_year in period['month_year_pairs']:
+        months_by_year.setdefault(month_year, []).append(month_name)
+
+    query = Q()
+    for month_year, month_names in months_by_year.items():
+        query |= Q(run__year=month_year, run__month__in=month_names)
+
+    items = (
+        PayrollRunItem.objects
+        .filter(query, run__salary_type=salary_type, status='INCLUDED')
+        .select_related('employee', 'employee__department', 'run')
+        .prefetch_related('lines')
+        .order_by('employee__name')
+    )
+
+    employees: dict[int, dict] = {}
+    for item in items:
+        emp = item.employee
+        month_key = f"{item.run.month}_{item.run.year}"
+        row = employees.setdefault(emp.id, {
+            'employee_pk': emp.id,
+            'employee_id': emp.employee_id,
+            'employee_name': emp.name,
+            'department': emp.department.department_name if emp.department else '',
+            'monthly': {},
+            'ytd_gross': 0.0,
+            'ytd_deductions': 0.0,
+            'ytd_net': 0.0,
+            'ytd_pf_employee': 0.0,
+            'ytd_tds': 0.0,
+            'months_count': 0,
+        })
+
+        pf_employee = sum(float(line.amount) for line in item.lines.all() if line.code == 'PF_EMP')
+
+        row['monthly'][month_key] = {
+            'month': item.run.month,
+            'year': item.run.year,
+            'gross': float(item.gross_earnings),
+            'deductions': float(item.total_deductions),
+            'net': float(item.net_pay),
+            'pf_employee': pf_employee,
+            'tds': float(item.tds_amount),
+        }
+
+        row['ytd_gross'] += float(item.gross_earnings)
+        row['ytd_deductions'] += float(item.total_deductions)
+        row['ytd_net'] += float(item.net_pay)
+        row['ytd_pf_employee'] += pf_employee
+        row['ytd_tds'] += float(item.tds_amount)
+        row['months_count'] += 1
+
+    rows = sorted(employees.values(), key=lambda x: x['employee_name'])
+    return rows, period
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def ytd_report(request):
+    """GET /api/payroll/reports/ytd/
+    Returns YTD payroll totals from April through the selected month."""
+    month = request.GET.get('month', '').strip()
+    year_str = request.GET.get('year', '')
+    salary_type = request.GET.get('salary_type', 'SALARY').upper()
+
+    if not month or not year_str:
+        return Response({'success': False, 'message': 'month and year are required.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+    try:
+        year = int(year_str)
+    except ValueError:
+        return Response({'success': False, 'message': 'year must be an integer.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    rows, period = _get_ytd_rows(month, year, salary_type)
+    if not period:
+        return Response({'success': False, 'message': 'Invalid month provided.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    total_gross = sum(r['ytd_gross'] for r in rows)
+    total_deductions = sum(r['ytd_deductions'] for r in rows)
+    total_net = sum(r['ytd_net'] for r in rows)
+    total_pf = sum(r['ytd_pf_employee'] for r in rows)
+    total_tds = sum(r['ytd_tds'] for r in rows)
+
+    # Monthly columns for the table
+    monthly_columns = [
+        {'month': m[0], 'year': m[1]} for m in period['month_year_pairs']
+    ]
+
+    return Response({
+        'success': True,
+        'salary_type': salary_type,
+        'period': {
+            'start_month': period['start_month'],
+            'start_year': period['start_year'],
+            'end_month': period['end_month'],
+            'end_year': period['end_year'],
+            'months': period['months'],
+        },
+        'monthly_columns': monthly_columns,
+        'employee_count': len(rows),
+        'total_gross': round(total_gross, 2),
+        'total_deductions': round(total_deductions, 2),
+        'total_net': round(total_net, 2),
+        'total_pf_employee': round(total_pf, 2),
+        'total_tds': round(total_tds, 2),
+        'rows': rows,
+    })

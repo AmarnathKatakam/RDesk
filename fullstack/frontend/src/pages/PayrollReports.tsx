@@ -63,7 +63,46 @@ interface VarianceRow {
   is_new: boolean;
 }
 
-type TabKey = 'register' | 'bank' | 'department' | 'variance';
+type TabKey = 'register' | 'bank' | 'department' | 'variance' | 'ytd';
+
+interface YTDRow {
+  employee_id: string;
+  employee_name: string;
+  department: string;
+  monthly: Record<string, {
+    month: string;
+    year: number;
+    gross: number;
+    deductions: number;
+    net: number;
+    pf_employee: number;
+    tds: number;
+  }>;
+  ytd_gross: number;
+  ytd_deductions: number;
+  ytd_net: number;
+  ytd_pf_employee: number;
+  ytd_tds: number;
+  months_count: number;
+}
+
+interface YTDData {
+  rows: YTDRow[];
+  period: {
+    start_month: string;
+    start_year: number;
+    end_month: string;
+    end_year: number;
+    months: number;
+  };
+  monthly_columns: { month: string; year: number }[];
+  employee_count: number;
+  total_gross: number;
+  total_deductions: number;
+  total_net: number;
+  total_pf_employee: number;
+  total_tds: number;
+}
 
 const MONTHS = [
   'January','February','March','April','May','June',
@@ -131,6 +170,8 @@ const PayrollReports: React.FC = () => {
     employee_count: number;
   } | null>(null);
 
+  const [ytdData, setYtdData] = useState<YTDData | null>(null);
+
   const params = { month, year, salary_type: salaryType };
 
   const load = useCallback(async () => {
@@ -149,6 +190,9 @@ const PayrollReports: React.FC = () => {
       } else if (tab === 'variance') {
         const resp = await payrollReportsAPI.getVariance({ ...params, threshold: varianceThreshold });
         setVarianceData(resp.data);
+      } else if (tab === 'ytd') {
+        const resp = await payrollReportsAPI.getYTD(params);
+        setYtdData(resp.data);
       }
     } catch (err: any) {
       setError(err?.response?.data?.message || 'Failed to load report.');
@@ -158,17 +202,26 @@ const PayrollReports: React.FC = () => {
   }, [tab, month, year, salaryType, varianceThreshold]);
 
   const handleExport = async () => {
+    if (!canExport) return;
+    
     setExporting(true);
     try {
+      let blob: Blob;
+      let filename: string;
+      
       if (tab === 'register') {
         const resp = await payrollReportsAPI.exportRegister(params);
-        downloadBlob(resp.data, `payroll_register_${month}_${year}.xlsx`);
-      } else if (tab === 'bank') {
+        blob = new Blob([resp.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        filename = `Payroll_Register_${month}_${year}.xlsx`;
+      } else {
         const resp = await payrollReportsAPI.exportBankTransfer(params);
-        downloadBlob(resp.data, `bank_transfer_${month}_${year}.csv`);
+        blob = new Blob([resp.data], { type: 'text/csv;charset=utf-8;' });
+        filename = `Bank_Transfer_${month}_${year}.csv`;
       }
-    } catch {
-      setError('Export failed.');
+      
+      downloadBlob(blob, filename);
+    } catch (err: any) {
+      setError(`Export failed: ${err?.response?.data?.message || err.message || 'Unknown error'}`);
     } finally {
       setExporting(false);
     }
@@ -190,6 +243,7 @@ const PayrollReports: React.FC = () => {
           ['bank', 'Bank Transfer'],
           ['department', 'Department Summary'],
           ['variance', 'Variance Report'],
+          ['ytd', 'Year to Date'],
         ] as [TabKey, string][]).map(([key, label]) => (
           <button
             key={key}
@@ -431,6 +485,55 @@ const PayrollReports: React.FC = () => {
                     </tr>
                   );
                 })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {tab === 'ytd' && ytdData && (
+        <div>
+          <div style={{ fontSize: '13px', color: '#64748b', marginBottom: '12px' }}>
+            Year-to-date totals from {ytdData.period.start_month} {ytdData.period.start_year} through {ytdData.period.end_month} {ytdData.period.end_year} ({ytdData.period.months} months)
+          </div>
+          <SummaryCards data={[
+            { label: 'Employees', value: ytdData.employee_count.toString() },
+            { label: 'Total Gross', value: fmt(ytdData.total_gross) },
+            { label: 'Total Deductions', value: fmt(ytdData.total_deductions) },
+            { label: 'Total Net', value: fmt(ytdData.total_net), highlight: true },
+            { label: 'PF Employee YTD', value: fmt(ytdData.total_pf_employee) },
+            { label: 'TDS YTD', value: fmt(ytdData.total_tds) },
+          ]} />
+          <div style={{ overflowX: 'auto', marginTop: '16px' }}>
+            <table style={tableStyle}>
+              <thead>
+                <tr style={{ background: '#1e3a5f' }}>
+                  {['Emp ID', 'Name', 'Department',
+                    ...ytdData.monthly_columns.map(col => `${col.month.substring(0, 3)} ${col.year}`),
+                    'YTD Net'
+                  ].map(h => (
+                    <th key={h} style={thStyle}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {ytdData.rows.map((row, i) => (
+                  <tr key={row.employee_id} style={{ background: i % 2 === 0 ? '#fff' : '#f8fafc' }}>
+                    <td style={tdStyle}>{row.employee_id}</td>
+                    <td style={tdStyle}>{row.employee_name}</td>
+                    <td style={tdStyle}>{row.department}</td>
+                    {ytdData.monthly_columns.map(col => {
+                      const monthKey = `${col.month}_${col.year}`;
+                      const monthData = row.monthly[monthKey];
+                      return (
+                        <td key={monthKey} style={{ ...tdStyle, fontWeight: 600, color: '#15803d' }}>
+                          {monthData ? fmt(monthData.net) : '—'}
+                        </td>
+                      );
+                    })}
+                    <td style={{ ...tdStyle, fontWeight: 600, color: '#15803d' }}>{fmt(row.ytd_net)}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

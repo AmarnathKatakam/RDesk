@@ -369,3 +369,189 @@ def generate_qr_code_data(employee, salary_data, pay_period):
     """
     qr_data = f"✓ Verified|EmpID:{employee.employee_id}|Month:{pay_period['month']}|Year:{pay_period['year']}"
     return qr_data
+
+
+
+# ─── C1: Async payslip release task ──────────────────────────────────────────
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=30)
+def release_run_payslips_task(self, run_id: int, performed_by_id: int):
+    """
+    Celery task: generate PDFs and release payslips for all INCLUDED items
+    in a PayrollRun. Fires after transition_run sets status=RELEASED.
+
+    Progress is tracked via Payslip.is_released — the frontend polls
+    GET /api/payroll/runs/<id>/release-progress/ to show a progress bar.
+
+    Retries up to 3 times on unexpected failure (30s delay between retries).
+    """
+    from decimal import Decimal
+    from django.utils import timezone
+    from django.contrib.auth import get_user_model
+
+    from .models import PayrollRun, PayrollRunItem, Payslip
+    from .frontend_pdf_generator import FrontendPDFGenerator
+    from .utils import PayslipFileManager
+    from .audit import log_payroll_action
+
+    logger = logging.getLogger('payroll.release_task')
+    AuthUser = get_user_model()
+
+    try:
+        run = PayrollRun.objects.get(pk=run_id)
+    except PayrollRun.DoesNotExist:
+        logger.error('release_run_payslips_task: PayrollRun #%s not found', run_id)
+        return
+
+    try:
+        performed_by = AuthUser.objects.get(pk=performed_by_id)
+    except AuthUser.DoesNotExist:
+        performed_by = None
+
+    items = (
+        PayrollRunItem.objects
+        .filter(run=run, status='INCLUDED')
+        .select_related('employee', 'employee__department')
+        .prefetch_related('lines')
+    )
+
+    if not items.exists():
+        log_payroll_action(
+            action='BULK_RELEASE',
+            performed_by=performed_by,
+            pay_period_month=run.month,
+            pay_period_year=run.year,
+            notes=f'Run #{run.id}: 0 payslips (no INCLUDED items).',
+        )
+        return
+
+    pdf_generator = FrontendPDFGenerator()
+    file_manager = PayslipFileManager()
+    now = timezone.now()
+    performed_by_pk = getattr(performed_by, 'pk', None)
+
+    released = 0
+    email_sent = 0
+    errors = []
+
+    for item in items:
+        employee = item.employee
+        try:
+            lines = list(item.lines.all())
+
+            def _line_amount(code):
+                for ln in lines:
+                    if ln.code == code:
+                        return ln.amount
+                return Decimal('0')
+
+            if lines:
+                basic            = _line_amount('BASIC')
+                hra              = _line_amount('HRA')
+                da               = _line_amount('DA')
+                conveyance       = _line_amount('CONVEYANCE')
+                medical          = _line_amount('MEDICAL')
+                special_allow    = _line_amount('SPECIAL_ALLOWANCE')
+                pf_employee      = _line_amount('PF_EMP')
+                professional_tax = _line_amount('PT')
+                pf_employer      = _line_amount('PF_EMPLOYER')
+                other_deductions = Decimal('0')
+                salary_advance   = Decimal('0')
+                total_earnings   = item.gross_earnings
+                total_deductions = item.total_deductions
+                net_pay          = item.net_pay
+            else:
+                sd = item.salary_data
+                if sd:
+                    basic = sd.basic; hra = sd.hra; da = sd.da
+                    conveyance = sd.conveyance; medical = sd.medical
+                    special_allow = sd.special_allowance
+                    pf_employee = sd.pf_employee; professional_tax = sd.professional_tax
+                    pf_employer = sd.pf_employer; other_deductions = sd.other_deductions
+                    salary_advance = sd.salary_advance
+                    total_earnings = sd.gross_earnings; total_deductions = sd.total_deductions
+                    net_pay = sd.net_pay
+                else:
+                    basic = hra = da = conveyance = medical = special_allow = Decimal('0')
+                    pf_employee = professional_tax = pf_employer = Decimal('0')
+                    other_deductions = salary_advance = Decimal('0')
+                    total_earnings = item.gross_earnings
+                    total_deductions = item.total_deductions
+                    net_pay = item.net_pay
+
+            qr_data = f"✓ Verified|EmpID:{employee.employee_id}|Month:{run.month}|Year:{run.year}"
+
+            payslip, _ = Payslip.objects.update_or_create(
+                employee=employee,
+                pay_period_month=run.month,
+                pay_period_year=run.year,
+                salary_type=run.salary_type,
+                defaults=dict(
+                    salary_type=run.salary_type,
+                    work_days=item.work_days or item.days_in_month,
+                    days_in_month=item.days_in_month,
+                    lop_days=item.lop_days,
+                    basic=basic, hra=hra, da=da,
+                    conveyance=conveyance, medical=medical,
+                    special_allowance=special_allow,
+                    pf_employee=pf_employee,
+                    total_earnings=total_earnings,
+                    professional_tax=professional_tax,
+                    pf_employer=pf_employer,
+                    other_deductions=other_deductions,
+                    salary_advance=salary_advance,
+                    total_deductions=total_deductions,
+                    net_pay=net_pay,
+                    tds_amount=getattr(item, 'tds_amount', Decimal('0')),
+                    qr_code_data=qr_data,
+                    generated_by=performed_by,
+                    is_released=True,
+                    released_at=now,
+                    released_by_id=performed_by_pk,
+                ),
+            )
+
+            pdf_path = file_manager.get_payslip_path(
+                run.year, run.month,
+                employee.name.lower().replace(' ', '_'),
+            )
+            payslip.pdf_path = str(pdf_path)
+            payslip.save(update_fields=['pdf_path'])
+            pdf_generator.generate_payslip_pdf(payslip, pdf_path)
+
+            item.payslip = payslip
+            item.save(update_fields=['payslip'])
+
+            try:
+                sent = file_manager.send_payslip_email(payslip)
+                action = 'EMAIL_SENT' if sent else 'EMAIL_FAILED'
+                log_payroll_action(
+                    action=action, performed_by=performed_by,
+                    payslip=payslip, employee=employee,
+                    pay_period_month=run.month, pay_period_year=run.year,
+                    notes=f"Email {'sent to' if sent else 'failed for'} {employee.email}",
+                )
+                if sent:
+                    email_sent += 1
+            except Exception as email_exc:
+                logger.warning('Email failed for %s: %s', employee.employee_id, email_exc)
+
+            released += 1
+
+        except Exception as exc:
+            errors.append(f"{employee.name}: {exc}")
+            logger.error('Release failed for %s in run #%s: %s', employee.employee_id, run_id, exc)
+
+    log_payroll_action(
+        action='BULK_RELEASE',
+        performed_by=performed_by,
+        pay_period_month=run.month,
+        pay_period_year=run.year,
+        notes=(
+            f"Run #{run.id} async release: {released} payslips, "
+            f"{email_sent} emails. "
+            + (f"Errors: {errors}" if errors else "")
+        ),
+    )
+    logger.info('release_run_payslips_task done: run=%s released=%s emails=%s errors=%s',
+                run_id, released, email_sent, len(errors))

@@ -10,19 +10,9 @@ import base64
 from decimal import Decimal
 
 from django.conf import settings
+from playwright.sync_api import sync_playwright
 
 from .models import Payslip
-
-
-def _get_sync_playwright():
-    try:
-        from playwright.sync_api import sync_playwright
-    except ImportError as exc:
-        raise ImportError(
-            "Playwright is required for payslip PDF generation. "
-            "Install it with 'pip install playwright' and run 'playwright install chromium'."
-        ) from exc
-    return sync_playwright
 
 LOGO_PATH = r"C:/Users/ajays/RothDesk/logo1.png"
 
@@ -666,7 +656,6 @@ class FrontendPDFGenerator:
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
         html = _build_html(payslip)
 
-        sync_playwright = _get_sync_playwright()
         with sync_playwright() as p:
             browser = p.chromium.launch()
             page = browser.new_page()

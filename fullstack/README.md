@@ -112,7 +112,7 @@ Key tables created by migrations:
 - `celery.py` — Celery app instance for async task queue
 - `middleware.py` — Custom CSRF exemption for `/api/*` routes
 - `authentication.py` — Custom JWT authentication class
-- `wsgi.py` / `asgi.py` — WSGI/ASGI entry points for deployment
+- `wsgi.py` / `asgi.py` — WSGI/ASGI server entry points
 
 #### `authentication/` — Admin Users & Employee Auth
 - `models.py` — `AdminUser` (custom Django user model replacing `auth.User`)

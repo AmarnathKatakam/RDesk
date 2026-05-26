@@ -280,7 +280,7 @@ export const attendanceAPI = {
     api.get('/attendance/dashboard', { params }),
   getEmployeeDashboard: (employeeId?: string | number) =>
     api.get('/auth/employee/dashboard/', { params: employeeId ? { employee_id: employeeId } : {} }),
-  punchIn: (payload: { employee_id?: string | number; latitude?: number | string; longitude?: number | string; notes?: string; workType?: 'WFO' | 'WFH' | 'ON_SITE' }) =>
+  punchIn: (payload: { employee_id?: string | number; latitude?: number | string; longitude?: number | string; notes?: string; workType?: 'WFO' | 'WFH' | 'ONSITE' }) =>
     api.post('/attendance/punch-in', payload),
   punchOut: (payload: { employee_id?: string | number; latitude?: number | string; longitude?: number | string; notes?: string }) =>
     api.post('/attendance/punch-out', payload),
@@ -400,6 +400,9 @@ export const attendanceAPI = {
 
   // Configuration status
   getConfigStatus: () => api.get('/attendance/config-status'),
+
+  // Employee YTD data
+  getEmployeeYTD: () => api.get('/auth/employee/ytd/'),
 };
 
 // Employee Activation & Onboarding API
@@ -432,6 +435,8 @@ export const employeeDashboardAPI = {
 
 // Employee Management Admin API
 export const employeeAdminAPI = {
+  // Bulk release endpoint supports both `employee_ids` and the admin UI-friendly
+  // alias `selected_employees` for compatibility with current frontend payloads.
   bulkReleasePayslips: (data: { month: string; year: number; selected_employees?: number[] }) =>
     api.post('/auth/employee/bulk-release-payslips/', data),
   sendRelievingLetter: (data: FormData) =>
@@ -511,6 +516,10 @@ export const payrollRunAPI = {
     api.post(`/payroll/runs/${runId}/release-hold/`, { employee_id: employeeId }),
   reprocess: (runId: string | number, employeeId: number) =>
     api.post(`/payroll/runs/${runId}/reprocess/`, { employee_id: employeeId }),
+  releaseEmployee: (runId: string | number, employeeId: number) =>
+    api.post(`/payroll/runs/${runId}/release-employee/`, { employee_id: employeeId }),
+  releaseProgress: (runId: string | number) =>
+    api.get(`/payroll/runs/${runId}/release-progress/`),
   getValidationIssues: (params: { month: string; year: number; severity?: string; resolved?: boolean }) =>
     api.get('/payslips/validation-issues/', { params }),
   validateDryRun: (data: { employee_ids: number[]; pay_period: { month: string; year: number }; salary_method?: string }) =>
@@ -601,4 +610,6 @@ export const payrollReportsAPI = {
     api.get('/payroll/reports/department-summary/', { params }),
   getVariance: (params: { month: string; year: number; salary_type?: string; threshold?: number }) =>
     api.get('/payroll/reports/variance/', { params }),
+  getYTD: (params: { month: string; year: number; salary_type?: string }) =>
+    api.get('/payroll/reports/ytd/', { params }),
 };
