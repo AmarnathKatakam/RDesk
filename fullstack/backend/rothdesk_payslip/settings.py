@@ -8,6 +8,7 @@ All sensitive values are loaded from the .env file via python-decouple.
 import os
 from pathlib import Path
 from decouple import Config, RepositoryEnv
+import dj_database_url
 
 # Base directory of the project (one level above this file)
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -101,12 +102,24 @@ WSGI_APPLICATION = "rothdesk_payslip.wsgi.application"
 # Database — MySQL
 # ---------------------------------------------------------------------------
 # Credentials come from .env so they are never hard-coded here
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+DATABASE_URL = str(config("DATABASE_URL", default="")).strip()
+
+if DATABASE_URL:
+    DATABASES = {
+        "default": dj_database_url.parse(
+            DATABASE_URL,
+            conn_max_age=600,
+            ssl_require=DATABASE_URL.startswith("postgres://")
+            or DATABASE_URL.startswith("postgresql://"),
+        )
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
 # ---------------------------------------------------------------------------
 # Custom User Model
 # ---------------------------------------------------------------------------

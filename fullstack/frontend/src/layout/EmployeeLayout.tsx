@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, FileText, UserCircle, Clock3, CalendarDays, Grid3x3, FolderClosed, Wallet, BookUser, Settings } from 'lucide-react';
+import { LayoutDashboard, FileText, UserCircle, Clock3, CalendarDays, Grid3x3, FolderClosed, Landmark, Scale } from 'lucide-react';
 import TopBar from '@/components/TopBar';
 import AppDrawer, { type DrawerNavItem } from '@/components/AppDrawer';
 
@@ -8,12 +8,11 @@ const EMPLOYEE_NAV: DrawerNavItem[] = [
   { label: 'Dashboard',  path: '/employee/dashboard',  icon: LayoutDashboard },
   { label: 'Attendance', path: '/employee/attendance', icon: Clock3          },
   { label: 'Payslips',   path: '/employee/payslips',   icon: FileText        },
-  { label: 'Salary',     path: '/employee/salary',     icon: Wallet          },
   { label: 'Leaves',     path: '/employee/leaves',     icon: CalendarDays    },
   { label: 'Documents',  path: '/employee/documents',  icon: FolderClosed    },
-  { label: 'Team',       path: '/employee/team',       icon: BookUser        },
+  { label: 'Tax',        path: '/employee/tax-declaration', icon: Landmark   },
+  { label: 'Regime',     path: '/employee/tax-regime', icon: Scale           },
   { label: 'Profile',    path: '/employee/profile',    icon: UserCircle      },
-  { label: 'Settings',   path: '/employee/settings',   icon: Settings        },
 ];
 
 const EmployeeLayout: React.FC = () => {

@@ -175,13 +175,17 @@ const EmployeeDashboardPage: React.FC = () => {
     try {
       setActionLoading(type);
       const coords = await getLocation();
+      const userId = localStorage.getItem('userId') || undefined;
       if (type === 'IN') {
         await attendanceAPI.punchIn({
+          employee_id: userId,
           latitude: coords.latitude,
-          longitude: coords.longitude
+          longitude: coords.longitude,
+          workType: 'WFH',
         });
       } else {
         await attendanceAPI.punchOut({
+          employee_id: userId,
           latitude: coords.latitude,
           longitude: coords.longitude
         });

@@ -179,7 +179,7 @@ def create_audit_log(
 
 
 def get_active_assignment(employee: Employee, target_date: date) -> EmployeeShiftAssignment | None:
-    return (
+    assignment = (
         EmployeeShiftAssignment.objects.select_related("shift", "office_location", "policy")
         .filter(
             employee=employee,
@@ -190,6 +190,99 @@ def get_active_assignment(employee: Employee, target_date: date) -> EmployeeShif
         .order_by("-effective_from", "-id")
         .first()
     )
+    if assignment:
+        return assignment
+
+    shift, office_location, policy = ensure_default_attendance_config()
+    if employee.shift_id and employee.shift and employee.shift.is_active:
+        shift = employee.shift
+
+    assignment, _ = EmployeeShiftAssignment.objects.get_or_create(
+        employee=employee,
+        effective_from=employee.doj or target_date,
+        effective_to=None,
+        defaults={
+            "shift": shift,
+            "office_location": office_location,
+            "policy": policy,
+            "is_active": True,
+        },
+    )
+    if not employee.shift_id:
+        employee.shift = shift
+        employee.save(update_fields=["shift", "updated_at"])
+    return assignment
+
+
+def ensure_default_attendance_config() -> tuple[Shift, OfficeLocation, AttendancePolicy]:
+    shift, _ = Shift.objects.get_or_create(
+        name="General",
+        defaults={
+            "start_time": "09:30",
+            "end_time": "18:30",
+            "late_after": "09:45",
+            "half_day_after": "11:00",
+            "overtime_allowed": True,
+            "is_active": True,
+        },
+    )
+    if not shift.is_active:
+        shift.is_active = True
+        shift.save(update_fields=["is_active", "updated_at"])
+
+    office_location, _ = OfficeLocation.objects.get_or_create(
+        name="Default Office",
+        defaults={
+            "latitude": Decimal("0.000000"),
+            "longitude": Decimal("0.000000"),
+            "allowed_radius_meters": 200,
+            "is_default": True,
+            "is_active": True,
+        },
+    )
+    changed_location_fields = []
+    if not office_location.is_active:
+        office_location.is_active = True
+        changed_location_fields.append("is_active")
+    if not office_location.is_default:
+        office_location.is_default = True
+        changed_location_fields.append("is_default")
+    if changed_location_fields:
+        changed_location_fields.append("updated_at")
+        office_location.save(update_fields=changed_location_fields)
+
+    policy, _ = AttendancePolicy.objects.get_or_create(
+        name="Default Attendance Policy",
+        defaults={
+            "default_shift": shift,
+            "default_office_location": office_location,
+            "enforce_gps": False,
+            "allow_remote_punch": True,
+            "allowed_work_types": [],
+            "is_active": True,
+        },
+    )
+    changed_policy_fields = []
+    if policy.default_shift_id != shift.id:
+        policy.default_shift = shift
+        changed_policy_fields.append("default_shift")
+    if policy.default_office_location_id != office_location.id:
+        policy.default_office_location = office_location
+        changed_policy_fields.append("default_office_location")
+    if policy.enforce_gps:
+        policy.enforce_gps = False
+        changed_policy_fields.append("enforce_gps")
+    if not policy.allow_remote_punch:
+        policy.allow_remote_punch = True
+        changed_policy_fields.append("allow_remote_punch")
+    if not policy.is_active:
+        policy.is_active = True
+        changed_policy_fields.append("is_active")
+    if changed_policy_fields:
+        changed_policy_fields.append("updated_at")
+        policy.save(update_fields=changed_policy_fields)
+
+    return shift, office_location, policy
 
 
 def get_active_policy(assignment: EmployeeShiftAssignment | None) -> AttendancePolicy | None:

@@ -182,6 +182,7 @@ const EmployeeAttendancePage: React.FC = () => {
           employee_id: employeeId,
           latitude: coords.latitude,
           longitude: coords.longitude,
+          workType: 'WFH',
         });
         setSuccess('Punch in recorded successfully.');
       } else {

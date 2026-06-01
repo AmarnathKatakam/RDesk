@@ -106,6 +106,7 @@ api.interceptors.response.use(
       console.error('API Error:', {
         status: error.response?.status,
         statusText: error.response?.statusText,
+        message: error.response?.data?.message || error.response?.data?.detail,
         data: error.response?.data,
         config: {
           url: error.config?.url,

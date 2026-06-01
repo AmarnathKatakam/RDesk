@@ -59,7 +59,6 @@ import SalaryTemplatesPage   from './pages/SalaryTemplates';
 import SalaryAssignmentPage  from './pages/SalaryAssignment';
 import MonthlyInputsPage     from './pages/MonthlyInputs';
 import PayrollReportsPage    from './pages/PayrollReports';
-import PayrollPage           from './pages/Payroll';
 
 // Admin / HR pages — Tax
 import TaxDeclarationAdminPage from './pages/TaxDeclarationAdmin';

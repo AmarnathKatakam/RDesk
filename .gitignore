@@ -12,6 +12,8 @@ eggs/
 .eggs/
 lib/
 lib64/
+!fullstack/frontend/src/lib/
+!fullstack/frontend/src/lib/utils.ts
 parts/
 sdist/
 var/
