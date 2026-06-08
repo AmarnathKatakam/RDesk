@@ -15,8 +15,25 @@ interface EmployeeRow {
   employee_id: string;
   name: string;
   email?: string;
+  personal_email?: string;
+  phone?: string;
+  mobile?: string;
   doj?: string;
   dob?: string;
+  dol?: string;
+  resignation_date?: string;
+  last_working_day?: string;
+  employment_status?: string;
+  reporting_manager?: number | null;
+  reporting_manager_name?: string;
+  gender?: string;
+  blood_group?: string;
+  category?: string;
+  employee_category?: string;
+  experience?: string | number;
+  total_experience?: string | number;
+  confirmation_date?: string;
+  probation_end_date?: string;
   position?: string;
   location?: string;
   is_active: boolean;
@@ -72,6 +89,73 @@ const normalizeList = <T,>(payload: any): T[] => {
 
 const toDate = (v?: string | null) =>
   v ? new Date(v).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
+
+const isValidDate = (value?: string | null) => {
+  if (!value) return false;
+  return !Number.isNaN(new Date(value).getTime());
+};
+
+const isWithinNextDays = (value?: string | null, days = 30, yearly = false) => {
+  if (!isValidDate(value)) return false;
+
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+
+  const end = new Date(now);
+  end.setDate(end.getDate() + days);
+
+  const source = new Date(value!);
+  const target = yearly
+    ? new Date(now.getFullYear(), source.getMonth(), source.getDate())
+    : new Date(source);
+  target.setHours(0, 0, 0, 0);
+
+  if (yearly && target < now) {
+    target.setFullYear(target.getFullYear() + 1);
+  }
+
+  return target >= now && target <= end;
+};
+
+const isWithinLastDays = (value?: string | null, days = 30) => {
+  if (!isValidDate(value)) return false;
+
+  const now = new Date();
+  now.setHours(23, 59, 59, 999);
+
+  const start = new Date(now);
+  start.setDate(start.getDate() - days);
+
+  const target = new Date(value!);
+  return target >= start && target <= now;
+};
+
+const getAge = (dob?: string | null) => {
+  if (!isValidDate(dob)) return Number.POSITIVE_INFINITY;
+  const birthDate = new Date(dob!);
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age -= 1;
+  }
+  return age;
+};
+
+const hasValue = (value: unknown) =>
+  value !== undefined && value !== null && String(value).trim() !== '';
+
+const isResignedEmployee = (employee: EmployeeRow) => {
+  const status = (employee.employment_status || '').toLowerCase();
+  return (
+    employee.is_active === false ||
+    status.includes('resign') ||
+    status.includes('inactive') ||
+    hasValue(employee.dol) ||
+    hasValue(employee.resignation_date) ||
+    hasValue(employee.last_working_day)
+  );
+};
 
 // ─── View All panel ───────────────────────────────────────────────────────────
 
@@ -134,7 +218,8 @@ const EmployeeAnalyticsTable: React.FC<{
   employees: EmployeeRow[];
   loading: boolean;
   onAddEmployee: () => void;
-}> = ({ employees, loading, onAddEmployee }) => {
+  title?: string;
+}> = ({ employees, loading, onAddEmployee, title = 'All Employee Info' }) => {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
 
@@ -153,7 +238,7 @@ const EmployeeAnalyticsTable: React.FC<{
     <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
       {/* Table header bar */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-        <h3 className="text-sm font-semibold text-slate-800">All Employee Info</h3>
+        <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
         <button
           onClick={onAddEmployee}
           className="h-8 px-3 rounded-lg bg-blue-900 text-white text-xs font-medium inline-flex items-center gap-1.5 hover:bg-blue-800 transition-colors"
@@ -272,18 +357,83 @@ const AnalyticsHubPage: React.FC = () => {
   };
 
   const recentItems = ANALYTICS_ITEMS.filter((i) => RECENT_IDS.includes(i.id));
+  const activeItem = ANALYTICS_ITEMS.find((item) => item.id === activeId);
+  const displayedEmployees = useMemo(() => {
+    switch (activeId) {
+      case 'all-employees':
+        return employees.filter((emp) => hasValue(emp.employee_id) || hasValue(emp.name));
+      case 'basic-info':
+        return employees.filter((emp) =>
+          hasValue(emp.employee_id) ||
+          hasValue(emp.name) ||
+          hasValue(emp.position) ||
+          hasValue(emp.department?.department_name) ||
+          hasValue(emp.location) ||
+          hasValue(emp.email)
+        );
+      case 'personal-info':
+        return employees.filter((emp) =>
+          hasValue(emp.dob) ||
+          hasValue(emp.personal_email) ||
+          hasValue(emp.gender)
+        );
+      case 'birthdays':
+        return employees.filter((emp) => isWithinNextDays(emp.dob, 30, true));
+      case 'anniversaries':
+        return employees.filter((emp) => isWithinNextDays(emp.doj, 30, true));
+      case 'new-joiners':
+        return employees.filter((emp) => isWithinLastDays(emp.doj, 30));
+      case 'confirmations':
+        return employees.filter((emp) =>
+          isWithinNextDays(emp.confirmation_date || emp.probation_end_date, 30)
+        );
+      case 'resignees':
+        return employees.filter(isResignedEmployee);
+      case 'location-gender':
+        return employees.filter((emp) => hasValue(emp.location) && hasValue(emp.gender));
+      case 'location-blood':
+        return employees.filter((emp) => hasValue(emp.location) && hasValue(emp.blood_group));
+      case 'location':
+        return employees.filter((emp) => hasValue(emp.location));
+      case 'gender':
+        return employees.filter((emp) => hasValue(emp.gender));
+      case 'age':
+        return employees
+          .filter((emp) => isValidDate(emp.dob))
+          .sort((a, b) => getAge(a.dob) - getAge(b.dob));
+      case 'experience':
+        return employees.filter((emp) =>
+          hasValue(emp.experience) || hasValue(emp.total_experience) || isValidDate(emp.doj)
+        );
+      case 'years-service':
+        return employees.filter((emp) => isValidDate(emp.doj));
+      case 'emp-status':
+        return employees.filter((emp) => typeof emp.is_active === 'boolean' || hasValue(emp.employment_status));
+      case 'contact-list':
+        return employees.filter((emp) =>
+          hasValue(emp.email) || hasValue(emp.personal_email) || hasValue(emp.phone) || hasValue(emp.mobile)
+        );
+      case 'dept-list':
+        return employees.filter((emp) =>
+          hasValue(emp.department?.department_name) || hasValue(emp.reporting_manager_name) || hasValue(emp.reporting_manager)
+        );
+      case 'blood-group':
+        return employees.filter((emp) => hasValue(emp.blood_group));
+      case 'work-exp':
+        return employees.filter((emp) =>
+          hasValue(emp.experience) || hasValue(emp.total_experience) || isValidDate(emp.doj)
+        );
+      case 'category-info':
+        return employees.filter((emp) =>
+          hasValue(emp.category) || hasValue(emp.employee_category) || hasValue(emp.position)
+        );
+      default:
+        return employees;
+    }
+  }, [activeId, employees]);
 
   return (
     <div className="space-y-4">
-
-      {/* Breadcrumb */}
-      <nav className="flex items-center gap-1 text-xs text-slate-400">
-        <button onClick={() => navigate('/admin/employees')} className="hover:text-slate-600">Home</button>
-        <ChevronRight className="h-3 w-3" />
-        <button onClick={() => navigate('/admin/employees')} className="hover:text-slate-600">Employee</button>
-        <ChevronRight className="h-3 w-3" />
-        <span className="text-slate-600 font-medium">Analytics Hub</span>
-      </nav>
 
       {/* Top bar */}
       <div className="flex items-center justify-between">
@@ -332,9 +482,10 @@ const AnalyticsHubPage: React.FC = () => {
 
       {/* Content area — always shows employee table (default: All Employee Info) */}
       <EmployeeAnalyticsTable
-        employees={employees}
+        employees={displayedEmployees}
         loading={loading}
         onAddEmployee={() => navigate('/admin/employees')}
+        title={activeItem?.label || 'All Employee Info'}
       />
 
       {/* View All slide-in panel */}
@@ -350,3 +501,4 @@ const AnalyticsHubPage: React.FC = () => {
 };
 
 export default AnalyticsHubPage;
+ 

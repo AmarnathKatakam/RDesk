@@ -325,15 +325,6 @@ const FamilyDetailsPage: React.FC = () => {
         }`}>{toast.msg}</div>
       )}
 
-      {/* Breadcrumb */}
-      <nav className="flex items-center gap-1 text-xs text-slate-400">
-        <button onClick={() => navigate('/admin/employees')} className="hover:text-slate-600">Home</button>
-        <ChevronRight className="h-3 w-3" />
-        <button onClick={() => navigate('/admin/employees')} className="hover:text-slate-600">Employee</button>
-        <ChevronRight className="h-3 w-3" />
-        <span className="text-slate-600 font-medium">Family Details</span>
-      </nav>
-
       {/* Info banner */}
       <div className="flex items-start gap-3 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-sm text-blue-700">
         <Info className="h-4 w-4 mt-0.5 shrink-0" />

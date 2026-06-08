@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis,
   Tooltip, BarChart, Bar, PieChart, Pie, Cell, Legend,
@@ -55,8 +56,11 @@ const ChartViewport: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 // ─── Help links (greytHR chip style) ─────────────────────────────────────────
 
 const HELP_CHIPS = [
-  'RothDesk Community', 'Statutory Compliances', 'Knowledge Centre',
-  'Resource Centre', 'How-to Videos',
+  { label: 'RothDesk Community', to: '/admin/help/rothdesk-community' },
+  { label: 'Statutory Compliances', to: '/admin/help/statutory-compliances' },
+  { label: 'Knowledge Centre', to: '/admin/help/knowledge-centre' },
+  { label: 'Resource Centre', to: '/admin/help/resource-centre' },
+  { label: 'How-to Videos', to: '/admin/help/how-to-videos' },
 ];
 
 const HelpLinks: React.FC = () => (
@@ -64,12 +68,13 @@ const HelpLinks: React.FC = () => (
     <h3 className="text-sm font-semibold text-slate-700 mb-3">Help Links</h3>
     <div className="flex flex-wrap gap-2">
       {HELP_CHIPS.map((chip) => (
-        <button
-          key={chip}
+        <Link
+          key={chip.to}
+          to={chip.to}
           className="h-8 px-4 rounded-full border border-slate-200 text-xs font-medium text-slate-600 hover:border-blue-300 hover:text-blue-700 hover:bg-blue-50 transition-all duration-150"
         >
-          {chip}
-        </button>
+          {chip.label}
+        </Link>
       ))}
     </div>
   </div>
@@ -174,6 +179,7 @@ const DashboardPage: React.FC = () => {
         <div className="inline-flex bg-slate-100 rounded-full p-1 gap-1">
           {(['welcome', 'dashboard'] as Tab[]).map((tab) => (
             <button
+              type="button"
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`h-8 px-5 rounded-full text-sm font-medium transition-all duration-200 capitalize ${
@@ -222,7 +228,7 @@ const DashboardPage: React.FC = () => {
             <div className="bg-white rounded-xl shadow-sm border border-slate-100 xl:col-span-2 min-w-0">
               <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
                 <h2 className="text-base font-semibold text-slate-800">Payroll Cost Trend</h2>
-                <button onClick={() => void loadAnalytics()} className="p-2 rounded-lg hover:bg-slate-100 transition-colors" title="Refresh">
+                <button type="button" onClick={() => void loadAnalytics()} className="p-2 rounded-lg hover:bg-slate-100 transition-colors" title="Refresh">
                   <RefreshCw className={`h-4 w-4 text-slate-400 ${loading ? 'animate-spin' : ''}`} />
                 </button>
               </div>
@@ -307,3 +313,4 @@ const DashboardPage: React.FC = () => {
 };
 
 export default DashboardPage;
+ 

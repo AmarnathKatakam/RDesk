@@ -8,6 +8,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import TopBar from '@/components/TopBar';
 import AppDrawer, { type DrawerNavItem } from '@/components/AppDrawer';
+import AdminBreadcrumb from '@/components/AdminBreadcrumb';
 
 const ADMIN_NAV: DrawerNavItem[] = [
   { label: 'Dashboard',        path: '/admin/dashboard',                 icon: LayoutDashboard },
@@ -59,6 +60,7 @@ const AdminLayout: React.FC = () => {
         userRole="Administrator"
         onLogout={handleLogout}
         showSearch
+        onIconClick={() => navigate('/admin/dashboard')}
       />
 
       <AppDrawer
@@ -67,10 +69,12 @@ const AdminLayout: React.FC = () => {
         items={ADMIN_NAV}
         userName={userName}
         userRole="Administrator"
+        onBrandClick={() => navigate('/admin/dashboard')}
       />
 
       <main className="pt-14 min-h-screen">
-        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-6">
+        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-6 space-y-4">
+          <AdminBreadcrumb />
           <Outlet />
         </div>
       </main>

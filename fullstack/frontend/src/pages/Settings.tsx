@@ -1,10 +1,16 @@
 /**
- * Component: pages\Settings.tsx
- * Purpose: Defines UI structure and behavior for this view/component.
- */
+* Component: pages\Settings.tsx
+* Purpose: Defines UI structure and behavior for this view/component.
+*/
 import React from 'react';
 
 const SettingsPage: React.FC = () => {
+  const [savedSection, setSavedSection] = React.useState('');
+
+  const handleSave = (section: string) => {
+    setSavedSection(section);
+  };
+
   return (
     <div className="space-y-5">
       <div>
@@ -17,21 +23,24 @@ const SettingsPage: React.FC = () => {
           <h2 className="text-lg font-semibold text-slate-900">Company Settings</h2>
           <input className="w-full h-10 rounded-xl border border-slate-200 px-3 text-sm" placeholder="Company name" defaultValue="BlackRoth" />
           <input className="w-full h-10 rounded-xl border border-slate-200 px-3 text-sm" placeholder="Support email" defaultValue="support@blackroth.in" />
-          <button className="h-10 px-4 rounded-xl bg-blue-900 text-white text-sm">Save Company Settings</button>
+          <button type="button" onClick={() => handleSave('Company settings')} className="h-10 px-4 rounded-xl bg-blue-900 text-white text-sm">Save Company Settings</button>
+          {savedSection === 'Company settings' && <p className="text-xs text-emerald-600">Company settings saved.</p>}
         </section>
 
         <section className="saas-card saas-section space-y-3">
           <h2 className="text-lg font-semibold text-slate-900">Email Settings</h2>
           <input className="w-full h-10 rounded-xl border border-slate-200 px-3 text-sm" placeholder="SMTP Host" />
           <input className="w-full h-10 rounded-xl border border-slate-200 px-3 text-sm" placeholder="SMTP Port" />
-          <button className="h-10 px-4 rounded-xl bg-blue-900 text-white text-sm">Save Email Settings</button>
+          <button type="button" onClick={() => handleSave('Email settings')} className="h-10 px-4 rounded-xl bg-blue-900 text-white text-sm">Save Email Settings</button>
+          {savedSection === 'Email settings' && <p className="text-xs text-emerald-600">Email settings saved.</p>}
         </section>
 
         <section className="saas-card saas-section space-y-3">
           <h2 className="text-lg font-semibold text-slate-900">Payroll Settings</h2>
           <input className="w-full h-10 rounded-xl border border-slate-200 px-3 text-sm" placeholder="Payroll cycle day" defaultValue="30" />
           <input className="w-full h-10 rounded-xl border border-slate-200 px-3 text-sm" placeholder="Default currency" defaultValue="INR" />
-          <button className="h-10 px-4 rounded-xl bg-blue-900 text-white text-sm">Save Payroll Settings</button>
+          <button type="button" onClick={() => handleSave('Payroll settings')} className="h-10 px-4 rounded-xl bg-blue-900 text-white text-sm">Save Payroll Settings</button>
+          {savedSection === 'Payroll settings' && <p className="text-xs text-emerald-600">Payroll settings saved.</p>}
         </section>
 
         <section className="saas-card saas-section space-y-3">
@@ -50,7 +59,8 @@ const SettingsPage: React.FC = () => {
               Enable 2FA requirement
             </label>
           </div>
-          <button className="h-10 px-4 rounded-xl bg-blue-900 text-white text-sm">Save Security Settings</button>
+          <button type="button" onClick={() => handleSave('Security settings')} className="h-10 px-4 rounded-xl bg-blue-900 text-white text-sm">Save Security Settings</button>
+          {savedSection === 'Security settings' && <p className="text-xs text-emerald-600">Security settings saved.</p>}
         </section>
       </div>
     </div>
@@ -59,3 +69,4 @@ const SettingsPage: React.FC = () => {
 
 export default SettingsPage;
 
+ 

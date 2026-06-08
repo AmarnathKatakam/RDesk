@@ -281,7 +281,7 @@ export const attendanceAPI = {
     api.get('/attendance/dashboard', { params }),
   getEmployeeDashboard: (employeeId?: string | number) =>
     api.get('/auth/employee/dashboard/', { params: employeeId ? { employee_id: employeeId } : {} }),
-  punchIn: (payload: { employee_id?: string | number; latitude?: number | string; longitude?: number | string; notes?: string; workType?: 'WFO' | 'WFH' | 'ONSITE' }) =>
+  punchIn: (payload: { employee_id?: string | number; latitude?: number | string; longitude?: number | string; notes?: string; workType?: 'WFO' | 'WFH' | 'ONSITE'; work_type?: 'WFO' | 'WFH' | 'ONSITE' }) =>
     api.post('/attendance/punch-in', payload),
   punchOut: (payload: { employee_id?: string | number; latitude?: number | string; longitude?: number | string; notes?: string }) =>
     api.post('/attendance/punch-out', payload),

@@ -311,15 +311,6 @@ const OrgChartPage: React.FC = () => {
         }`}>{toast.msg}</div>
       )}
 
-      {/* Breadcrumb */}
-      <nav className="flex items-center gap-1 text-xs text-slate-400">
-        <button onClick={() => navigate('/admin/employees')} className="hover:text-slate-600">Home</button>
-        <ChevronRight className="h-3 w-3" />
-        <button onClick={() => navigate('/admin/employees')} className="hover:text-slate-600">Employee</button>
-        <ChevronRight className="h-3 w-3" />
-        <span className="text-slate-600 font-medium">Organisation Chart</span>
-      </nav>
-
       {/* Action bar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="relative">

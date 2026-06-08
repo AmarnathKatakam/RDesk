@@ -265,6 +265,7 @@ export const usePunchInFlow = ({
         latitude: coords?.latitude,
         longitude: coords?.longitude,
         workType: selectedWorkType,
+        work_type: selectedWorkType,
       });
 
       writePreference(employeeId, selectedWorkType);

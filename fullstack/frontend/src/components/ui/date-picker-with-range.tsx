@@ -1,7 +1,7 @@
 /**
- * Component: components\ui\date-picker-with-range.tsx
- * Purpose: Defines UI structure and behavior for this view/component.
- */
+* Component: components\ui\date-picker-with-range.tsx
+* Purpose: Defines UI structure and behavior for this view/component.
+*/
 "use client";
 
 import * as React from "react";
@@ -31,6 +31,7 @@ export default function DatePickerWithRange({
       <Popover>
         <PopoverTrigger asChild>
           <Button
+            type="button"
             id="date"
             variant={"outline"}
             className={cn(
@@ -68,3 +69,4 @@ export default function DatePickerWithRange({
   );
 }
 
+ 

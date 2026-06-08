@@ -184,7 +184,7 @@ const CEODashboard: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white p-6 rounded-lg border border-gray-200 shadow">
           <h3 className="text-lg font-semibold mb-4 text-gray-900">Attendance Trend (Last 30 Days)</h3>
-          {attendanceData.length > 0 ? (
+          {false ? (
             <ResponsiveContainer width="100%" height={300}>
               <LineChart data={attendanceData}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -203,8 +203,13 @@ const CEODashboard: React.FC = () => {
               </LineChart>
             </ResponsiveContainer>
           ) : (
-            <div className="text-center py-8 text-gray-500">No data available</div>
-          )}
+            <div className="rounded-lg border border-gray-200 bg-gray-50 py-8 text-center text-gray-500">
+              <p className="font-medium"> no attendence data available</p>
+              <p className="text-sm mt-1">
+                data will be appear here once records are available.
+              </p>
+            </div>
+          )}    
         </div>
 
         <div className="bg-white p-6 rounded-lg border border-gray-200 shadow">

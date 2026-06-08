@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, FileText, UserCircle, Clock3, CalendarDays, Grid3x3, FolderClosed, Landmark, Scale } from 'lucide-react';
 import TopBar from '@/components/TopBar';
+import AdminBreadcrumb from '@/components/AdminBreadcrumb';
 import AppDrawer, { type DrawerNavItem } from '@/components/AppDrawer';
 
 const EMPLOYEE_NAV: DrawerNavItem[] = [
@@ -49,6 +50,7 @@ const EmployeeLayout: React.FC = () => {
         userRole="Employee"
         onLogout={handleLogout}
         showSearch={false}
+        onIconClick={() => navigate('/employee/dashboard')}
       />
 
       <AppDrawer
@@ -57,10 +59,12 @@ const EmployeeLayout: React.FC = () => {
         items={EMPLOYEE_NAV}
         userName={employee?.name || 'Employee'}
         userRole="Employee"
+        onBrandClick={() => navigate('/employee/dashboard')}
       />
 
       <main className="pt-14 min-h-screen">
         <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-6">
+          <AdminBreadcrumb />
           <Outlet />
         </div>
       </main>

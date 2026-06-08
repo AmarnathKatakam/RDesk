@@ -5,6 +5,7 @@ Handles Leave Management, Document Vault, Notifications, Directory, and CEODashb
 
 import json
 import os
+import logging
 from datetime import datetime, timedelta, date
 from decimal import Decimal
 
@@ -16,6 +17,10 @@ from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse, FileResponse
 from django.core.files.storage import default_storage
 from django.core.paginator import Paginator
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework import status as drf_status
 
 from employees.models import (
     Employee, LeaveRequest, LeaveType, EmployeeDocument,
@@ -36,6 +41,10 @@ from employees.leave_services import (
 from authentication.models import AdminUser
 from payslip_generation.models import Payslip
 from departments.models import Department
+from authentication.employee_views import IsAuthenticatedOrAdminSession, _has_admin_access
+
+logger = logging.getLogger(__name__)
+
 
 def _read_request_data(request):
     if request.content_type and 'application/json' in request.content_type:
@@ -134,35 +143,42 @@ def get_leave_types(request):
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
 
 
+@api_view(["POST"])
+@permission_classes([IsAuthenticatedOrAdminSession])
 @csrf_exempt
-@require_http_methods(["POST"])
 def admin_approve_leave(request, leave_request_id=None):
     """
     Admin/HR approves a leave request.
-    On approval:
-      1. Deducts days from EmployeeLeaveBalance (atomic F() update)
-      2. Marks AttendanceRecord rows as LEAVE for each approved day
-      3. Sends LEAVE_APPROVED notification to employee
     """
     try:
-        admin_id = request.session.get('admin_id')
-        if not admin_id:
-            return JsonResponse({'success': False, 'message': 'Unauthorized'}, status=401)
+        if not _has_admin_access(request):
+            return Response({'success': False, 'message': 'Unauthorized: Admin access required'}, status=drf_status.HTTP_401_UNAUTHORIZED)
 
-        data = _read_request_data(request)
-        admin = get_object_or_404(AdminUser, id=admin_id)
+        admin_id = request.session.get('admin_id')
+        if admin_id:
+            admin = get_object_or_404(AdminUser, id=admin_id)
+        elif request.user and request.user.is_authenticated:
+            admin = request.user
+        else:
+            return Response({'success': False, 'message': 'Unauthorized'}, status=drf_status.HTTP_401_UNAUTHORIZED)
+
+        data = request.data
         target_leave_request_id = leave_request_id or data.get('leave_request_id')
+        
+        if not target_leave_request_id:
+            return Response({'success': False, 'message': 'leave_request_id is required.'}, status=drf_status.HTTP_400_BAD_REQUEST)
+
         try:
             parsed_leave_request_id = int(target_leave_request_id)
         except (TypeError, ValueError):
-            return JsonResponse({'success': False, 'message': 'Invalid leave request id.'}, status=400)
+            return Response({'success': False, 'message': 'Invalid leave request id.'}, status=drf_status.HTTP_400_BAD_REQUEST)
 
         result = approve_leave_request(
             leave_request_id=parsed_leave_request_id,
             admin=admin,
         )
 
-        return JsonResponse({
+        return Response({
             'success': True,
             'message': 'Leave approved successfully',
             'leave_request': result['leave_request'],
@@ -170,32 +186,40 @@ def admin_approve_leave(request, leave_request_id=None):
         })
 
     except LeaveManagementError as exc:
-        return JsonResponse(
+        return Response(
             {'success': False, 'message': exc.message, **exc.payload},
             status=exc.status_code,
         )
     except Exception as e:
-        return JsonResponse({'success': False, 'message': str(e)}, status=500)
+        logger.exception("Error in admin_approve_leave for request data: %s", request.data)
+        return Response({'success': False, 'message': f"Internal Server Error: {str(e)}"}, status=drf_status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@api_view(["POST"])
+@permission_classes([IsAuthenticatedOrAdminSession])
 @csrf_exempt
-@require_http_methods(["POST"])
 def admin_reject_leave(request, leave_request_id=None):
     """Admin rejects a leave request"""
     try:
         admin_id = request.session.get('admin_id')
-        
-        if not admin_id:
-            return JsonResponse({'success': False, 'message': 'Unauthorized'}, status=401)
-        
-        data = _read_request_data(request)
-        admin = get_object_or_404(AdminUser, id=admin_id)
-        rejection_reason = data.get('rejection_reason', '')
+        if admin_id:
+            admin = get_object_or_404(AdminUser, id=admin_id)
+        elif request.user and request.user.is_authenticated:
+            admin = request.user
+        else:
+            return Response({'success': False, 'message': 'Unauthorized'}, status=drf_status.HTTP_401_UNAUTHORIZED)
+
+        data = request.data
+        rejection_reason = data.get('rejection_reason', 'Rejected by admin')
         target_leave_request_id = leave_request_id or data.get('leave_request_id')
+        
+        if not target_leave_request_id:
+            return Response({'success': False, 'message': 'leave_request_id is required.'}, status=drf_status.HTTP_400_BAD_REQUEST)
+
         try:
             parsed_leave_request_id = int(target_leave_request_id)
         except (TypeError, ValueError):
-            return JsonResponse({'success': False, 'message': 'Invalid leave request id.'}, status=400)
+            return Response({'success': False, 'message': 'Invalid leave request id.'}, status=drf_status.HTTP_400_BAD_REQUEST)
 
         result = reject_leave_request(
             leave_request_id=parsed_leave_request_id,
@@ -203,19 +227,20 @@ def admin_reject_leave(request, leave_request_id=None):
             rejection_reason=rejection_reason,
         )
         
-        return JsonResponse({
+        return Response({
             'success': True,
             'message': 'Leave rejected successfully',
             'leave_request': result['leave_request'],
         })
 
     except LeaveManagementError as exc:
-        return JsonResponse(
+        return Response(
             {'success': False, 'message': exc.message, **exc.payload},
             status=exc.status_code,
         )
     except Exception as e:
-        return JsonResponse({'success': False, 'message': str(e)}, status=500)
+        logger.exception("Error in admin_reject_leave for request data: %s", request.data)
+        return Response({'success': False, 'message': f"Internal Server Error: {str(e)}"}, status=drf_status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @require_http_methods(["GET"])
@@ -573,7 +598,8 @@ def get_unread_notification_count(request):
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
 
 
-@require_http_methods(["POST"])
+@api_view(["POST"])
+@csrf_exempt
 def mark_notification_as_read(request, notif_id):
     """Mark notification as read for employee or admin"""
     try:
@@ -589,18 +615,19 @@ def mark_notification_as_read(request, notif_id):
             notification.is_read = True
             notification.save()
 
-            return JsonResponse({'success': True, 'message': 'Notification marked as read'})
+            return Response({'success': True, 'message': 'Notification marked as read'})
 
-        if admin_id:
+        if admin_id or (request.user and request.user.is_authenticated):
             read_ids = _get_admin_leave_notification_reads(request)
             read_ids.add(int(notif_id))
             _set_admin_leave_notification_reads(request, read_ids)
-            return JsonResponse({'success': True, 'message': 'Notification marked as read'})
+            return Response({'success': True, 'message': 'Notification marked as read'})
 
-        return JsonResponse({'success': False, 'message': 'Unauthorized'}, status=401)
+        return Response({'success': False, 'message': 'Unauthorized'}, status=drf_status.HTTP_401_UNAUTHORIZED)
     
     except Exception as e:
-        return JsonResponse({'success': False, 'message': str(e)}, status=500)
+        logger.exception("Error marking notification as read")
+        return Response({'success': False, 'message': str(e)}, status=drf_status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @require_http_methods(["POST"])
@@ -615,7 +642,7 @@ def mark_all_notifications_as_read(request):
             Notification.objects.filter(employee=employee, is_read=False).update(is_read=True)
             return JsonResponse({'success': True, 'message': 'All notifications marked as read'})
 
-        if admin_id:
+        if admin_id or (request.user and request.user.is_authenticated):
             pending_ids = {
                 leave.id for leave in LeaveRequest.objects.filter(status='PENDING').only('id')
             }
@@ -625,6 +652,7 @@ def mark_all_notifications_as_read(request):
         return JsonResponse({'success': False, 'message': 'Unauthorized'}, status=401)
     
     except Exception as e:
+        logger.exception("Error marking all notifications as read")
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
 
 

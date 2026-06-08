@@ -49,7 +49,12 @@ def _validate_password_strength(password: str) -> str | None:
 
 
 def _has_admin_access(request) -> bool:
-    return bool(request.session.get('admin_id')) or bool(getattr(request.user, 'is_authenticated', False))
+    """
+    Checks if the current request has admin privileges via JWT or Session.
+    """
+    is_jwt_authenticated = bool(request.user and request.user.is_authenticated)
+    is_session_admin = bool(request.session and request.session.get('admin_id'))
+    return is_jwt_authenticated or is_session_admin
 
 
 @api_view(['POST'])
@@ -965,4 +970,3 @@ def employee_ytd_view(request):
         },
         'monthly_breakdown': monthly_breakdown,
     }, status=status.HTTP_200_OK)
-

@@ -33,11 +33,17 @@ logger = logging.getLogger('employees')
 
 
 def _resolve_admin_role(user):
-    """Mirror frontend role expectations from group/username."""
+    """
+    Mirror frontend role expectations from group/username.
+    Safely handles AnonymousUser for session-based admin access.
+    """
+    if not user or not user.is_authenticated:
+        return 'admin'  # Default to admin for session-verified requests
+
     group_names = {group.name.lower() for group in user.groups.all()}
     if 'ceo' in group_names or str(user.username).lower() == 'ceo':
         return 'ceo'
-    if 'hr' in group_names:
+    if 'hr' in group_names or 'hr' in str(user.username).lower():
         return 'hr'
     return 'admin'
 
@@ -124,11 +130,12 @@ def regenerate_employee_password(request, pk):
     - view mode: returns plain password once
     - mail mode: emails password to employee
     """
-    role = _resolve_admin_role(request.user)
-    if role not in {'admin', 'hr', 'ceo'}:
+    from authentication.employee_views import _has_admin_access
+    
+    if not _has_admin_access(request):
         return Response({
             'status': 'error',
-            'message': 'Only Admin/HR can regenerate employee passwords.'
+            'message': 'Unauthorized: Only Admin/HR can regenerate employee passwords.'
         }, status=status.HTTP_403_FORBIDDEN)
 
     mode = str(request.data.get('mode', '')).strip().lower()
@@ -145,6 +152,7 @@ def regenerate_employee_password(request, pk):
             'message': 'Employee does not have a login email configured.'
         }, status=status.HTTP_400_BAD_REQUEST)
 
+    role = _resolve_admin_role(request.user)
     plain_password = _generate_secure_temp_password()
     hashed_password = make_password(plain_password)
     now = timezone.now()

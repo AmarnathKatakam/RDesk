@@ -1,11 +1,12 @@
 /**
- * Component: pages\EmployeeDashboard.tsx
- * Purpose: Defines UI structure and behavior for this view/component.
- */
+* Component: pages\EmployeeDashboard.tsx
+* Purpose: Defines UI structure and behavior for this view/component.
+*/
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Clock, CalendarDays, Users, Award, FileText, Clock3, LogIn, LogOut as LogOutIcon, Timer, Upload } from 'lucide-react';
+import { usePunchInFlow, usePunchOutFlow } from '@/hooks/usePunchInFlow';
 type AttendanceStatus = 'PRESENT' | 'LATE' | 'HALF_DAY' | 'ABSENT' | 'LEAVE' | 'HOLIDAY' | 'WEEK_OFF' | 'NOT_MARKED';
 
 const statusLabel: Record<AttendanceStatus, string> = {
@@ -121,8 +122,10 @@ const EmployeeDashboardPage: React.FC = () => {
   const [todayAttendance, setTodayAttendance] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [actionLoading, setActionLoading] = useState<'IN' | 'OUT' | null>(null);
   const [ytdData, setYtdData] = useState<any>(null);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const employeeId = localStorage.getItem('userId') || undefined;
 
   // Live clock
   useEffect(() => {
@@ -132,76 +135,110 @@ const EmployeeDashboardPage: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Load dashboard data
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        setLoading(true);
-        const userId = localStorage.getItem('userId');
-        if (!userId) return;
-
-        const [dashboardRes, todayRes, ytdRes] = await Promise.all([
-          attendanceAPI.getEmployeeDashboard(userId),
-          attendanceAPI.getToday(userId),
-          attendanceAPI.getEmployeeYTD()
-        ]);
-
-        setDashboardData(dashboardRes.data);
-        setTodayAttendance(todayRes.data?.data);
-        setYtdData(ytdRes.data);
-      } catch (error) {
-        console.error('Dashboard load error:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadData();
-  }, []);
-
-  const getLocation = (): Promise<{ latitude: number; longitude: number }> => 
-    new Promise((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(
-        (position) => resolve({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude
-        }),
-        reject,
-        { enableHighAccuracy: true, timeout: 10000 }
-      );
-    });
-
-  const handleSwipe = async (type: 'IN' | 'OUT') => {
+  const loadData = async () => {
     try {
-      setActionLoading(type);
-      const coords = await getLocation();
-      const userId = localStorage.getItem('userId') || undefined;
-      if (type === 'IN') {
-        await attendanceAPI.punchIn({
-          employee_id: userId,
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-          workType: 'WFH',
+      setLoading(true);
+      setError('');
+      if (!employeeId) {
+        setDashboardData(null);
+        setTodayAttendance(null);
+        setYtdData(null);
+        return;
+      }
+
+      const [dashboardRes, todayRes, ytdRes] = await Promise.allSettled([
+        attendanceAPI.getEmployeeDashboard(employeeId),
+        attendanceAPI.getToday(employeeId),
+        attendanceAPI.getEmployeeYTD(),
+      ]);
+
+      if (dashboardRes.status === 'fulfilled') {
+        setDashboardData(dashboardRes.value.data);
+      } else {
+        setDashboardData(null);
+      }
+
+      if (todayRes.status === 'fulfilled') {
+        setTodayAttendance(todayRes.value.data?.data || {
+          status: 'NOT_MARKED',
+          punch_in_time: null,
+          punch_out_time: null,
+          working_hours: 0,
         });
       } else {
-        await attendanceAPI.punchOut({
-          employee_id: userId,
-          latitude: coords.latitude,
-          longitude: coords.longitude
+        setTodayAttendance({
+          status: 'NOT_MARKED',
+          punch_in_time: null,
+          punch_out_time: null,
+          working_hours: 0,
         });
       }
-      // Reload data
-      window.location.reload();
-    } catch (error) {
-      console.error('Swipe error:', error);
+
+      if (ytdRes.status === 'fulfilled') {
+        setYtdData(ytdRes.value.data);
+      } else {
+        setYtdData(null);
+      }
+
+      const failedRequests = [dashboardRes, todayRes, ytdRes].filter(
+        (result) => result.status === 'rejected'
+      );
+
+      if (failedRequests.length === 3) {
+        setError('Failed to load attendance data.');
+      } else if (failedRequests.length > 0) {
+        setError('Some dashboard data could not be loaded. Showing the available information.');
+      }
+    } catch (err: any) {
+      console.error('Dashboard load error:', err);
+      setError(err?.response?.data?.message || 'Failed to load attendance data.');
     } finally {
-      setActionLoading(null);
+      setLoading(false);
     }
   };
+
+  // Load dashboard data
+  useEffect(() => {
+    void loadData();
+  }, [employeeId]);
+
+  const { beginPunchIn, dialog: punchInDialog, submitting: punchInSubmitting } = usePunchInFlow({
+    employeeId,
+    onSuccess: async (message) => {
+      setError('');
+      setSuccess(message);
+      await loadData();
+    },
+    onError: (message) => {
+      setSuccess('');
+      setError(message);
+    },
+  });
+
+  const { beginPunchOut, dialog: punchOutDialog, submitting: punchOutSubmitting } = usePunchOutFlow({
+    employeeId,
+    onSuccess: async (message) => {
+      setError('');
+      setSuccess(message);
+      await loadData();
+    },
+    onError: (message) => {
+      setSuccess('');
+      setError(message);
+    },
+  });
 
   const employee = dashboardData?.employee;
   const cards = dashboardData?.cards || defaultCards;
   const today = dashboardData?.today || defaultToday;
+  const reviewItems = cards.review || [];
+  const attendanceStatus = (todayAttendance?.status || 'NOT_MARKED') as AttendanceStatus;
+  const canPunchIn =
+    !todayAttendance?.punch_in_time &&
+    attendanceStatus !== 'LEAVE' &&
+    attendanceStatus !== 'HOLIDAY' &&
+    attendanceStatus !== 'WEEK_OFF';
+  const canPunchOut = Boolean(todayAttendance?.punch_in_time && !todayAttendance?.punch_out_time);
 
   if (loading) {
     return (
@@ -214,7 +251,7 @@ const EmployeeDashboardPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       {/* Header */}
-      <div className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-50 px-4 sm:px-6 py-4">
+      <div className="bg-white/80 backdrop-blur-md border-b border-slate-200 top-0 z-50 px-4 sm:px-6 py-4">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">
@@ -230,6 +267,13 @@ const EmployeeDashboardPage: React.FC = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
+        {error ? (
+          <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>
+        ) : null}
+        {success ? (
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{success}</div>
+        ) : null}
+
         {/* Quick Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
           {/* Review Card */}
@@ -256,16 +300,24 @@ const EmployeeDashboardPage: React.FC = () => {
               </Button>
             </div>
             <div className="space-y-2">
-              {cards.review?.map((item, idx) => (
-                <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                  <span className="text-sm font-medium">{item.title}</span>
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    item.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
-                  }`}>
-                    {item.status}
-                  </span>
-                </div>
-              )) || <p className="text-slate-500 italic">Hurrah! You have nothing to review.</p>}
+              {reviewItems.length ? (
+                reviewItems.map((item, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                    <span className="text-sm font-medium">{item.title}</span>
+                    <span
+                      className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        item.status === 'completed'
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : 'bg-amber-100 text-amber-700'
+                      }`}
+                    >
+                      {item.status}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-slate-500 italic">Hurrah! You have nothing to review.</p>
+              )}
             </div>
             <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4">
               <p className="text-sm font-medium text-slate-900">Need to share a document with HR?</p>
@@ -358,8 +410,13 @@ const EmployeeDashboardPage: React.FC = () => {
               {cards.payslip?.has_latest ? (
                 <div>
                   <p className="text-sm font-medium">{cards.payslip.month} {cards.payslip.year}</p>
-                  <Button variant="link" className="h-auto p-0 text-sm font-medium text-blue-600 hover:text-blue-700">
-                    View Payslip →
+                  <Button
+                    type="button"
+                    variant="link"
+                    onClick={() => navigate('/employee/payslips')}
+                    className="h-auto p-0 text-sm font-medium text-blue-600 hover:text-blue-700"
+                  >
+                    View Payslip
                   </Button>
                 </div>
               ) : (
@@ -380,30 +437,30 @@ const EmployeeDashboardPage: React.FC = () => {
             <div className="flex flex-wrap gap-3">
               <Button
                 size="lg"
-                onClick={() => handleSwipe('IN')}
-                disabled={actionLoading === 'IN' || !todayAttendance || todayAttendance.punch_in_time}
+                onClick={() => void beginPunchIn()}
+                disabled={loading || !canPunchIn || punchInSubmitting || punchOutSubmitting}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg"
               >
                 <LogIn className="h-4 w-4 mr-2" />
-                {actionLoading === 'IN' ? 'Swiping In...' : 'Swipe In'}
+                {punchInSubmitting ? 'Swiping In...' : 'Swipe In'}
               </Button>
               <Button
                 size="lg"
-                onClick={() => handleSwipe('OUT')}
-                disabled={actionLoading === 'OUT' || !todayAttendance || !todayAttendance.punch_in_time || todayAttendance.punch_out_time}
+                onClick={() => void beginPunchOut()}
+                disabled={loading || !canPunchOut || punchInSubmitting || punchOutSubmitting}
                 className="bg-slate-800 hover:bg-slate-900 text-white shadow-lg"
               >
                 <LogOutIcon className="h-4 w-4 mr-2" />
-                {actionLoading === 'OUT' ? 'Swiping Out...' : 'Swipe Out'}
+                {punchOutSubmitting ? 'Swiping Out...' : 'Swipe Out'}
               </Button>
             </div>
           </div>
 
           {/* Today's Status Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             <StatCard 
               title="Status" 
-              value={todayAttendance ? statusLabel[todayAttendance.status as AttendanceStatus] : 'Not Marked'} 
+              value={statusLabel[attendanceStatus] || 'Not Marked'} 
               icon={Clock3} 
               color="primary" 
             />
@@ -412,6 +469,12 @@ const EmployeeDashboardPage: React.FC = () => {
               value={todayAttendance ? toTime(todayAttendance.punch_in_time) : '-'} 
               icon={LogIn} 
               color="success" 
+            />
+            <StatCard
+              title="Punch Out"
+              value={todayAttendance ? toTime(todayAttendance.punch_out_time) : '-'}
+              icon={LogOutIcon}
+              color="warning"
             />
             <StatCard 
               title="Work Hours" 
@@ -446,7 +509,7 @@ const EmployeeDashboardPage: React.FC = () => {
                   <div key={`${day}-${idx}`} className="font-semibold text-slate-600 py-2">{day}</div>
                 ))}
                 {/* Calendar days would go here */}
-                {Array.from({ length: 35 }).map((_, idx) => (
+                {Array.from({ length: 31 }).map((_, idx) => (
                   <div key={idx} className="h-16 border rounded-lg bg-slate-50 flex items-center justify-center text-xs cursor-pointer hover:bg-slate-100">
                     {idx + 1}
                   </div>
@@ -456,6 +519,8 @@ const EmployeeDashboardPage: React.FC = () => {
           </div>
         </div>
       </div>
+      {punchInDialog}
+      {punchOutDialog}
     </div>
   );
 };
@@ -463,3 +528,4 @@ const EmployeeDashboardPage: React.FC = () => {
 export default EmployeeDashboardPage;
 
 
+ 

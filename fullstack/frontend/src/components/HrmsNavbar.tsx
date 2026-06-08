@@ -56,8 +56,8 @@ const NAV_MENU: NavMenuItem[] = [
   {
     label: 'Setup',
     items: [
-      { label: 'Company Policies & Forms', path: '/admin/settings' },
-      { label: 'Employee Segment',         path: '/admin/settings' },
+      { label: 'Company Policies & Forms', path: '/admin/company-policies-forms' },
+      { label: 'Employee Segment',         path: '/admin/employee-segment' },
     ],
   },
 ];

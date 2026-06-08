@@ -40,8 +40,8 @@ const MENU: NavItem[] = [
   {
     label: 'Setup',
     items: [
-      { label: 'Company Policies & Forms', path: '/admin/settings' },
-      { label: 'Employee Segment',         path: '/admin/settings' },
+      { label: 'Company Policies & Forms', path: '/admin/company-policies-forms' },
+      { label: 'Employee Segment',         path: '/admin/employee-segment' },
     ],
   },
 ];
@@ -112,9 +112,6 @@ const EmployeeModuleNav: React.FC<Props> = ({ pageView, onViewChange, onAddEmplo
           to   { opacity: 1; transform: translateY(0); }
         }
       `}</style>
-
-      {/* ── Breadcrumb ── */}
-      <p className="text-xs text-slate-400 mb-1">Home &rsaquo; Employee</p>
 
       {/* ── Nav bar ── */}
       <div ref={ref} className="bg-white rounded-2xl border border-slate-100 shadow-sm">

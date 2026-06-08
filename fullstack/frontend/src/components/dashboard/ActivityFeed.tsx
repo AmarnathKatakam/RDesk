@@ -1,8 +1,9 @@
 /**
- * Component: components\dashboard\ActivityFeed.tsx
- * Purpose: Defines UI structure and behavior for this view/component.
- */
+* Component: components\dashboard\ActivityFeed.tsx
+* Purpose: Defines UI structure and behavior for this view/component.
+*/
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { DollarSign, UserPlus, CalendarCheck, Clock, MoreHorizontal, Loader2, AlertCircle } from 'lucide-react';
 import { dashboardAPI } from '@/services/api';
 
@@ -18,9 +19,21 @@ interface Activity {
 }
 
 const ActivityFeed: React.FC = () => {
+  const navigate = useNavigate();
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const getActivityPath = (type: string) => {
+    const routes: Record<string, string> = {
+      payroll: '/admin/payroll',
+      employee: '/admin/employees',
+      leave: '/admin/leaves',
+      attendance: '/admin/attendance',
+    };
+
+    return routes[type] || '/admin/notifications';
+  };
 
   useEffect(() => {
     const fetchActivities = async () => {
@@ -29,7 +42,7 @@ const ActivityFeed: React.FC = () => {
         setError(null);
 
         const response = await dashboardAPI.getDashboardActivity();
-        
+
         if (response.data && Array.isArray(response.data)) {
           // Transform API response to activity format
           const transformedActivities: Activity[] = response.data.map((item: any, index: number) => {
@@ -39,9 +52,9 @@ const ActivityFeed: React.FC = () => {
               leave: { icon: CalendarCheck, iconBg: 'bg-purple-100', iconColor: 'text-purple-600' },
               attendance: { icon: Clock, iconBg: 'bg-amber-100', iconColor: 'text-amber-600' },
             };
-            
+
             const typeInfo = activityTypes[item.type] || activityTypes.employee;
-            
+
             return {
               id: item.id || index,
               type: item.type,
@@ -51,7 +64,7 @@ const ActivityFeed: React.FC = () => {
               ...typeInfo,
             };
           });
-          
+
           setActivities(transformedActivities);
         } else {
           // Fallback to empty if no data
@@ -93,7 +106,11 @@ const ActivityFeed: React.FC = () => {
             <Clock className="h-5 w-5 text-roth-accent" />
             <h3 className="font-semibold text-gray-900">Recent Activities</h3>
           </div>
-          <button className="text-sm text-roth-accent hover:text-roth-secondary font-medium transition-colors">
+          <button
+            type="button"
+            onClick={() => navigate('/admin/notifications')}
+            className="text-sm text-roth-accent hover:text-roth-secondary font-medium transition-colors"
+          >
             View All
           </button>
         </div>
@@ -120,13 +137,17 @@ const ActivityFeed: React.FC = () => {
           <Clock className="h-5 w-5 text-roth-accent" />
           <h3 className="font-semibold text-gray-900">Recent Activities</h3>
         </div>
-        <button className="text-sm text-roth-accent hover:text-roth-secondary font-medium transition-colors">
+        <button
+          type="button"
+          onClick={() => navigate('/admin/notifications')}
+          className="text-sm text-roth-accent hover:text-roth-secondary font-medium transition-colors"
+        >
           View All
         </button>
       </div>
       <div className="divide-y divide-gray-100">
         {activities.map((activity) => (
-          <div key={activity.id} className="px-6 py-4 hover:bg-gray-50 transition-colors cursor-pointer">
+          <div key={activity.id} className="px-6 py-4 hover:bg-gray-50 transition-colors">
             <div className="flex items-start gap-4">
               <div className={`h-10 w-10 rounded-full ${activity.iconBg} flex items-center justify-center flex-shrink-0`}>
                 <activity.icon className={`h-5 w-5 ${activity.iconColor}`} />
@@ -137,7 +158,12 @@ const ActivityFeed: React.FC = () => {
                     <p className="text-sm font-medium text-gray-900">{activity.title}</p>
                     <p className="text-xs text-gray-500 mt-0.5">{activity.description}</p>
                   </div>
-                  <button className="text-gray-400 hover:text-gray-600 transition-colors" title="More options">
+                  <button
+                    type="button"
+                    onClick={() => navigate(getActivityPath(activity.type))}
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                    title="Open activity"
+                  >
                     <MoreHorizontal className="h-4 w-4" />
                   </button>
                 </div>
@@ -154,3 +180,4 @@ const ActivityFeed: React.FC = () => {
 export default ActivityFeed;
 
 
+ 

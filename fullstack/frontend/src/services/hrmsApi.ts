@@ -28,6 +28,12 @@ const normalizeApiBaseUrl = (rawValue: string | undefined): string => {
 
 const API_BASE_URL = normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
 
+const getCookie = (name: string): string | null => {
+  if (typeof document === 'undefined') return null;
+  const cookieMatch = document.cookie.match(new RegExp(`(^|;\\s*)${name}=([^;]*)`));
+  return cookieMatch ? decodeURIComponent(cookieMatch[2]) : null;
+};
+
 const resolveApiPath = (path: string): string => {
   if (/^https?:\/\//i.test(path)) {
     return path;
@@ -43,10 +49,29 @@ const resolveApiPath = (path: string): string => {
   return `${API_BASE_URL}${pathSuffix}`;
 };
 
-const withDefaults = (init?: FetchInput): RequestInit => ({
-  credentials: 'include',
-  ...init,
-});
+const withDefaults = (init?: FetchInput): RequestInit => {
+  const headers = new Headers(init?.headers);
+  const token = localStorage.getItem('authToken');
+  const method = (init?.method || 'GET').toUpperCase();
+  const csrfToken = getCookie('csrftoken');
+
+  if (token && !headers.has('Authorization')) {
+    const scheme = token.includes('.') ? 'Bearer' : 'Token';
+    headers.set('Authorization', `${scheme} ${token}`);
+  }
+
+  if (csrfToken && !['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(method)) {
+    if (!headers.has('X-CSRFToken') && !headers.has('X-CSRF-Token')) {
+      headers.set('X-CSRFToken', csrfToken);
+    }
+  }
+
+  return {
+    credentials: 'include',
+    ...init,
+    headers,
+  };
+};
 
 const buildCandidates = (primaryPath: string, fallbackPaths: string[] = []): string[] => {
   const candidates = [primaryPath, ...fallbackPaths];
@@ -208,7 +233,7 @@ export const hrmsApi = {
       const payload = new FormData();
       payload.append('notification_id', String(notificationId));
 
-      return fetchWithFallback('/api/hrms/notifications/read/', [`/api/auth/notifications/${notificationId}/read/`], {
+      return fetchWithFallback(`/api/auth/notifications/${notificationId}/read/`, ['/api/hrms/notifications/read/'], {
         method: 'POST',
         body: payload,
       });
@@ -217,7 +242,7 @@ export const hrmsApi = {
     const payload = new FormData();
     payload.append('mark_all', 'true');
 
-    return fetchWithFallback('/api/hrms/notifications/read/', ['/api/auth/notifications/read-all/'], {
+    return fetchWithFallback('/api/auth/notifications/read-all/', ['/api/hrms/notifications/read/'], {
       method: 'POST',
       body: payload,
     });

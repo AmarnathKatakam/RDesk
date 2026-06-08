@@ -3,6 +3,7 @@
  * Purpose: Defines UI structure and behavior for this view/component.
  */
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { BookOpen, FileCheck, DollarSign, HeadphonesIcon } from 'lucide-react';
 
 interface HelpLink {
@@ -10,6 +11,7 @@ interface HelpLink {
   description: string;
   icon: React.ElementType;
   color: string;
+  to: string;
 }
 
 const helpLinks: HelpLink[] = [
@@ -18,24 +20,28 @@ const helpLinks: HelpLink[] = [
     description: 'Learn how to use RDesk features',
     icon: BookOpen,
     color: 'bg-blue-100 text-blue-600 hover:bg-blue-200',
+    to: '/admin/resources/documentation',
   },
   { 
     title: 'HR Policies', 
     description: 'Company policies and guidelines',
     icon: FileCheck,
     color: 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200',
+    to: '/admin/resources/hr-policies',
   },
   { 
     title: 'Payroll Compliance', 
     description: 'Tax and legal compliance information',
     icon: DollarSign,
     color: 'bg-amber-100 text-amber-600 hover:bg-amber-200',
+    to: '/admin/resources/payroll-compliance',
   },
   { 
     title: 'Support Center', 
     description: 'Get help from our support team',
     icon: HeadphonesIcon,
     color: 'bg-purple-100 text-purple-600 hover:bg-purple-200',
+    to: '/admin/resources/support-center',
   },
 ];
 
@@ -48,9 +54,9 @@ const FooterHelp: React.FC = () => {
       <div className="p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {helpLinks.map((link, index) => (
-            <a
+            <Link
               key={index}
-              href="#"
+              to={link.to}
               className="group p-4 rounded-xl border border-gray-100 hover:border-roth-accent/30 hover:shadow-md transition-all duration-300"
             >
               <div className={`h-10 w-10 rounded-lg ${link.color} flex items-center justify-center mb-3 transition-transform duration-300 group-hover:scale-110`}>
@@ -58,7 +64,7 @@ const FooterHelp: React.FC = () => {
               </div>
               <p className="font-medium text-gray-900 text-sm">{link.title}</p>
               <p className="text-xs text-gray-500 mt-1">{link.description}</p>
-            </a>
+            </Link>
           ))}
         </div>
       </div>
@@ -70,9 +76,9 @@ const FooterHelp: React.FC = () => {
             © 2025 RDesk. All rights reserved.
           </p>
           <div className="flex items-center gap-6">
-            <a href="#" className="text-xs text-gray-500 hover:text-roth-accent transition-colors">Privacy Policy</a>
-            <a href="#" className="text-xs text-gray-500 hover:text-roth-accent transition-colors">Terms of Service</a>
-            <a href="#" className="text-xs text-gray-500 hover:text-roth-accent transition-colors">Contact</a>
+            <Link to="/admin/privacy-policy" className="text-xs text-gray-500 hover:text-roth-accent transition-colors">Privacy Policy</Link>
+            <Link to="/admin/terms-of-service" className="text-xs text-gray-500 hover:text-roth-accent transition-colors">Terms of Service</Link>
+            <Link to="/admin/contact" className="text-xs text-gray-500 hover:text-roth-accent transition-colors">Contact</Link>
           </div>
         </div>
       </div>

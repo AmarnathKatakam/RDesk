@@ -72,6 +72,22 @@ import DirectoryPage        from './pages/Directory';
 import MassCommunicationPage from './pages/MassCommunication';
 import NotificationsPage    from './pages/Notifications';
 import SettingsPage         from './pages/Settings';
+import CompanyPoliciesFormsPage from './pages/CompanyPoliciesForms';
+import EmployeeSegmentPage      from './pages/EmployeeSegment';
+
+// Help, resources, and footer pages
+import RothDeskCommunityPage     from './pages/help/RothDeskCommunity';
+import StatutoryCompliancesPage  from './pages/help/StatutoryCompliances';
+import KnowledgeCentrePage       from './pages/help/KnowledgeCentre';
+import ResourceCentrePage        from './pages/help/ResourceCentre';
+import HowToVideosPage           from './pages/help/HowToVideos';
+import DocumentationPage         from './pages/help/Documentation';
+import HRPoliciesPage            from './pages/help/HRPolicies';
+import PayrollCompliancePage     from './pages/help/PayrollCompliance';
+import SupportCenterPage         from './pages/help/SupportCenter';
+import PrivacyPolicyPage         from './pages/help/PrivacyPolicy';
+import TermsOfServicePage        from './pages/help/TermsOfService';
+import ContactPage               from './pages/help/Contact';
 
 // Employee self-service pages
 import EmployeeDashboardPage  from './pages/EmployeeDashboard';
@@ -108,7 +124,13 @@ function App() {
   return (
     <AuthProvider>
       {/* Suspense handles any lazy-loaded chunks while they load */}
-      <Suspense fallback={<p>Loading...</p>}>
+      <Suspense 
+        fallback={
+          <div className="flex justify-center items-center h-screen">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+          </div>
+        }
+      >      
         <Routes>
 
           {/* ----------------------------------------------------------------
@@ -135,6 +157,31 @@ function App() {
           ---------------------------------------------------------------- */}
           <Route element={<ProtectedRoute role="admin" />}>
             <Route element={<AdminLayout />}>
+              <Route path="/admin"                      element={<Navigate to="/admin/dashboard" replace />} />
+              <Route path="/admin/home"                 element={<Navigate to="/admin/dashboard" replace />} />
+              <Route path="/admin/employee"             element={<Navigate to="/admin/employees" replace />} />
+              <Route path="/admin/employees/home"       element={<Navigate to="/admin/employees" replace />} />
+              <Route path="/admin/employees/analytics/home" element={<Navigate to="/admin/employees/analytics" replace />} />
+              <Route path="/admin/employees/org-chart/home" element={<Navigate to="/admin/employees/org-chart" replace />} />
+              <Route path="/admin/employees/bank-pf-esi/home" element={<Navigate to="/admin/employees/bank-pf-esi" replace />} />
+              <Route path="/admin/employees/family-details/home" element={<Navigate to="/admin/employees/family-details" replace />} />
+              <Route path="/admin/employees/generate-letter/home" element={<Navigate to="/admin/employees/generate-letter" replace />} />
+              <Route path="/admin/payroll/home"        element={<Navigate to="/admin/payroll" replace />} />
+              <Route path="/admin/payroll/preview/home" element={<Navigate to="/admin/payroll/preview" replace />} />
+              <Route path="/admin/payroll/runs/home"    element={<Navigate to="/admin/payroll/runs" replace />} />
+              <Route path="/admin/payroll/salary-templates/home" element={<Navigate to="/admin/payroll/salary-templates" replace />} />
+              <Route path="/admin/payroll/salary-assignments/home" element={<Navigate to="/admin/payroll/salary-assignments" replace />} />
+              <Route path="/admin/payroll/monthly-inputs/home" element={<Navigate to="/admin/payroll/monthly-inputs" replace />} />
+              <Route path="/admin/payroll/reports/home" element={<Navigate to="/admin/payroll/reports" replace />} />
+              <Route path="/admin/payroll/tax-declarations/home" element={<Navigate to="/admin/payroll/tax-declarations" replace />} />
+              <Route path="/admin/payroll/tax-summary/home" element={<Navigate to="/admin/payroll/tax-summary" replace />} />
+              <Route path="/admin/attendance/home"     element={<Navigate to="/admin/attendance" replace />} />
+              <Route path="/admin/leaves/home"         element={<Navigate to="/admin/leaves" replace />} />
+              <Route path="/admin/documents/home"      element={<Navigate to="/admin/documents" replace />} />
+              <Route path="/admin/directory/home"      element={<Navigate to="/admin/directory" replace />} />
+              <Route path="/admin/emails/home"         element={<Navigate to="/admin/emails" replace />} />
+              <Route path="/admin/notifications/home"  element={<Navigate to="/admin/notifications" replace />} />
+              <Route path="/admin/settings/home"       element={<Navigate to="/admin/settings" replace />} />
 
               {/* Dashboard */}
               <Route path="/admin/dashboard"  element={<DashboardPage />} />
@@ -171,6 +218,22 @@ function App() {
               <Route path="/admin/emails"       element={<MassCommunicationPage />} />
               <Route path="/admin/notifications" element={<NotificationsPage />} />
               <Route path="/admin/settings"     element={<SettingsPage />} />
+              <Route path="/admin/company-policies-forms" element={<CompanyPoliciesFormsPage />} />
+              <Route path="/admin/employee-segment"        element={<EmployeeSegmentPage />} />
+
+              {/* Help, resources, and footer links */}
+              <Route path="/admin/help/rothdesk-community"       element={<RothDeskCommunityPage />} />
+              <Route path="/admin/help/statutory-compliances"    element={<StatutoryCompliancesPage />} />
+              <Route path="/admin/help/knowledge-centre"         element={<KnowledgeCentrePage />} />
+              <Route path="/admin/help/resource-centre"          element={<ResourceCentrePage />} />
+              <Route path="/admin/help/how-to-videos"            element={<HowToVideosPage />} />
+              <Route path="/admin/resources/documentation"       element={<DocumentationPage />} />
+              <Route path="/admin/resources/hr-policies"         element={<HRPoliciesPage />} />
+              <Route path="/admin/resources/payroll-compliance"  element={<PayrollCompliancePage />} />
+              <Route path="/admin/resources/support-center"      element={<SupportCenterPage />} />
+              <Route path="/admin/privacy-policy"                element={<PrivacyPolicyPage />} />
+              <Route path="/admin/terms-of-service"              element={<TermsOfServicePage />} />
+              <Route path="/admin/contact"                       element={<ContactPage />} />
 
             </Route>
           </Route>

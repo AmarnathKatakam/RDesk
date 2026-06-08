@@ -346,17 +346,6 @@ const EmployeeProfilePage: React.FC = () => {
         </div>
       )}
 
-      {/* Breadcrumb */}
-      <nav className="flex items-center gap-1 text-xs text-slate-400">
-        <button onClick={() => navigate('/admin/employees')} className="hover:text-slate-600">Home</button>
-        <ChevronRight className="h-3 w-3" />
-        <button onClick={() => navigate('/admin/employees/analytics')} className="hover:text-slate-600">Employee</button>
-        <ChevronRight className="h-3 w-3" />
-        <button onClick={() => navigate('/admin/employees/analytics')} className="hover:text-slate-600">Analytics Hub</button>
-        <ChevronRight className="h-3 w-3" />
-        <span className="text-slate-600 font-medium truncate max-w-[160px]">{employee.name}</span>
-      </nav>
-
       {/* Top selector bar */}
       <div className="bg-white rounded-xl border border-slate-200 px-4 py-3 flex items-center gap-3 flex-wrap">
         <span className="text-xs text-slate-500 font-medium">Employee</span>

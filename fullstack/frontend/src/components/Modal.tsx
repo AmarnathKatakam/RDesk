@@ -2,7 +2,7 @@
  * Component: components\Modal.tsx
  * Purpose: Defines UI structure and behavior for this view/component.
  */
-import React from 'react';
+import React,{useEffect} from 'react';
 import { X } from 'lucide-react';
 
 interface ModalProps {
@@ -20,7 +20,18 @@ const Modal: React.FC<ModalProps> = ({
   children,
   widthClassName = 'max-w-2xl',
 }) => {
-  if (!open) {
+    useEffect(() => {
+    if (!open) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [open]);
+  
+  if(!open) {
     return null;
   }
 
@@ -31,7 +42,7 @@ const Modal: React.FC<ModalProps> = ({
         className="absolute inset-0 bg-slate-950/40"
         aria-label="Close modal"
       />
-      <div className={`relative w-full ${widthClassName} saas-card`}>
+        <div className={`relative w-full ${widthClassName} saas-card max-h-[calc(100vh-2rem)] overflow-hidden flex flex-col`}>
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
           <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
           <button
@@ -42,11 +53,12 @@ const Modal: React.FC<ModalProps> = ({
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="p-5">{children}</div>
+        <div className="p-5 overflow-y-auto">{children}</div>
       </div>
     </div>
   );
 };
 
 export default Modal;
+
 

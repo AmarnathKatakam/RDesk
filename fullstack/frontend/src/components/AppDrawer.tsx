@@ -21,9 +21,10 @@ interface AppDrawerProps {
   items: DrawerNavItem[];
   userName?: string;
   userRole?: string;
+  onBrandClick?: () => void;
 }
 
-const AppDrawer: React.FC<AppDrawerProps> = ({ open, onClose, items, userName, userRole }) => {
+const AppDrawer: React.FC<AppDrawerProps> = ({ open, onClose, items, userName, userRole, onBrandClick }) => {
   const drawerRef = useRef<HTMLDivElement>(null);
 
   // Close on Escape
@@ -53,7 +54,7 @@ const AppDrawer: React.FC<AppDrawerProps> = ({ open, onClose, items, userName, u
       >
         {/* Header */}
         <div className="h-14 px-4 flex items-center justify-between border-b border-slate-100 shrink-0">
-          <BrandMark compact />
+          <BrandMark compact onIconClick={onBrandClick} />
           <button
             onClick={onClose}
             className="h-8 w-8 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 flex items-center justify-center transition-colors"

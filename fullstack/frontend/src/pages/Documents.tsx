@@ -223,7 +223,7 @@ const DocumentsPage: React.FC = () => {
         rows={rows}
         keyExtractor={(row) => row.id}
         loading={loading}
-        emptyText={isAdminView ? 'No employee documents found.' : 'No documents uploaded yet.'}
+        emptyText={isAdminView ? 'No employee documents found.' : 'No documents uploaded yet. Uploaded documents will appear here.'}
       />
     </div>
   );

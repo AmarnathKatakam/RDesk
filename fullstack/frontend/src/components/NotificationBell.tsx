@@ -5,6 +5,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Bell } from 'lucide-react';
 import { formatDistanceToNowStrict, parseISO } from 'date-fns';
+import { useNavigate } from 'react-router-dom';
 import { getJson, hrmsApi } from '@/services/hrmsApi';
 
 interface AppNotification {
@@ -18,12 +19,17 @@ interface AppNotification {
 const POLL_INTERVAL_MS = 30000;
 
 const NotificationBell: React.FC = () => {
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<AppNotification[]>([]);
 
   const unreadCount = useMemo(
     () => items.filter((item) => !item.is_read).length,
+    [items]
+  );
+  const unreadItems = useMemo(
+    () => items.filter((item) => !item.is_read),
     [items]
   );
 
@@ -73,6 +79,14 @@ const NotificationBell: React.FC = () => {
     }
   };
 
+  const openNotification = async (id: number, isRead: boolean) => {
+    if (!isRead) {
+      await markRead(id);
+    }
+    setOpen(false);
+    navigate('/admin/notifications');
+  };
+
   return (
     <div className="relative">
       <button
@@ -95,25 +109,22 @@ const NotificationBell: React.FC = () => {
             <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
               <p className="font-semibold text-slate-900">Notifications</p>
               {unreadCount > 0 && (
-                <button onClick={() => markRead()} className="text-xs text-blue-700 font-medium">
+                <button type="button" onClick={() => markRead()} className="text-xs text-blue-700 font-medium">
                   Mark all as read
                 </button>
               )}
             </div>
             <div className="max-h-80 overflow-auto">
               {loading && <p className="p-4 text-sm text-slate-500">Loading...</p>}
-              {!loading && items.length === 0 && (
+              {!loading && unreadItems.length === 0 && (
                 <p className="p-4 text-sm text-slate-500">No notifications</p>
               )}
               {!loading &&
-                items.map((item) => (
+                unreadItems.map((item) => (
                   <button
+                    type="button"
                     key={item.id}
-                    onClick={() => {
-                      if (!item.is_read) {
-                        void markRead(item.id);
-                      }
-                    }}
+                    onClick={() => openNotification(item.id, item.is_read)}
                     className={`w-full text-left p-4 border-b border-slate-100 hover:bg-slate-50 ${
                       item.is_read ? 'bg-white' : 'bg-blue-50/40'
                     }`}

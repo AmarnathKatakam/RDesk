@@ -89,8 +89,11 @@ const RegimeComparisonPage: React.FC = () => {
 
           {/* Side-by-side comparison */}
           <div className="grid grid-cols-2 gap-4">
-            {[data.old_regime, data.new_regime].map(r => (
-              <div key={r.regime}
+           {[
+  { key: 'old-regime', value: data.old_regime },
+  { key: 'new-regime', value: data.new_regime },
+].map(({ key, value: r }) => (
+  <div key={key}
                 className={`rounded-xl border p-4 space-y-3 ${
                   data.recommended_regime === r.regime
                     ? 'border-green-300 bg-green-50'

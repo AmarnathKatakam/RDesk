@@ -12,6 +12,12 @@ class Command(BaseCommand):
         email = os.environ.get("DJANGO_ADMIN_EMAIL", "").strip()
         password = os.environ.get("DJANGO_ADMIN_PASSWORD", "")
         full_name = os.environ.get("DJANGO_ADMIN_FULL_NAME", "System Administrator").strip()
+        reset_password = os.environ.get("DJANGO_ADMIN_RESET_PASSWORD", "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
 
         missing = [
             name
@@ -59,8 +65,14 @@ class Command(BaseCommand):
         if not user.is_active:
             user.is_active = True
             changed_fields.append("is_active")
+        if reset_password:
+            user.set_password(password)
+            changed_fields.append("password")
 
         if changed_fields:
             user.save(update_fields=changed_fields)
 
-        self.stdout.write(self.style.WARNING(f'Admin user "{username}" already exists.'))
+        if reset_password:
+            self.stdout.write(self.style.SUCCESS(f'Updated admin user "{username}" and reset password.'))
+        else:
+            self.stdout.write(self.style.WARNING(f'Admin user "{username}" already exists.'))

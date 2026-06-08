@@ -1,8 +1,9 @@
 /**
- * Component: components\dashboard\DashboardWidgets.tsx
- * Purpose: Defines UI structure and behavior for this view/component.
- */
+* Component: components\dashboard\DashboardWidgets.tsx
+* Purpose: Defines UI structure and behavior for this view/component.
+*/
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Users, UserPlus, UserCheck, DollarSign, Clock, AlertCircle, CheckCircle, XCircle, Calendar, CalendarCheck, CalendarX, Loader2, AlertTriangle } from 'lucide-react';
 import { dashboardAPI } from '@/services/api';
 
@@ -31,12 +32,13 @@ interface LeaveData {
 }
 
 const DashboardWidgets: React.FC = () => {
+  const navigate = useNavigate();
   // State for all widgets
   const [employeeSummary, setEmployeeSummary] = useState<EmployeeSummary | null>(null);
   const [payrollSummary, setPayrollSummary] = useState<PayrollSummary | null>(null);
   const [attendanceData, setAttendanceData] = useState<AttendanceData | null>(null);
   const [leaveData, setLeaveData] = useState<LeaveData | null>(null);
-  
+
   // Loading states
   const [loading, setLoading] = useState(true);
   const [errors, setErrors] = useState<Record<string, boolean>>({});
@@ -353,7 +355,11 @@ const DashboardWidgets: React.FC = () => {
                 </div>
               </div>
               <div className="mt-4 pt-4 border-t border-gray-100">
-                <button className="w-full text-sm text-roth-accent hover:text-roth-secondary font-medium transition-colors flex items-center justify-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => navigate('/admin/leaves')}
+                  className="w-full text-sm text-roth-accent hover:text-roth-secondary font-medium transition-colors flex items-center justify-center gap-1"
+                >
                   View All Leave Requests →
                 </button>
               </div>
@@ -368,3 +374,4 @@ const DashboardWidgets: React.FC = () => {
 export default DashboardWidgets;
 
 
+ 

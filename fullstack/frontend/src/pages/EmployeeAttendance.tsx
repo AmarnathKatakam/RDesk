@@ -86,7 +86,6 @@ const EmployeeAttendancePage: React.FC = () => {
   const [summary, setSummary] = useState<MonthlySummary | null>(null);
   const [calendarDays, setCalendarDays] = useState<CalendarDay[]>([]);
   const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState<'IN' | 'OUT' | null>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -100,7 +99,14 @@ const EmployeeAttendancePage: React.FC = () => {
         attendanceAPI.getToday(employeeId),
         attendanceAPI.getMonthly({ month, year, employee_id: employeeId }),
       ]);
-      setTodayData(todayRes.data?.data || null);
+      setTodayData(todayRes.data?.data || {
+        date: new Date().toISOString().slice(0, 10),
+        status: 'NOT_MARKED',
+        punch_in_time: null,
+        punch_out_time: null,
+        working_hours: 0,
+        overtime_hours: 0,
+      });
       setSummary(monthlyRes.data?.summary || null);
       setCalendarDays(Array.isArray(monthlyRes.data?.calendar) ? monthlyRes.data.calendar : []);
     } catch (err: any) {
@@ -140,69 +146,11 @@ const EmployeeAttendancePage: React.FC = () => {
     },
   });
 
-  const getCoordinates = (): Promise<{ latitude: number; longitude: number }> =>
-    new Promise((resolve, reject) => {
-      if (!navigator.geolocation) {
-        reject(new Error('Geolocation is not supported in this browser. Please enable location services.'));
-        return;
-      }
-      navigator.geolocation.getCurrentPosition(
-        (position) =>
-          resolve({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-          }),
-        (geoError) => {
-          if (geoError.code === geoError.PERMISSION_DENIED) {
-            reject(new Error('Location permission denied. Please enable location access in your browser settings.'));
-          } else if (geoError.code === geoError.POSITION_UNAVAILABLE) {
-            reject(new Error('Location information is unavailable. Please try again or check your device settings.'));
-          } else if (geoError.code === geoError.TIMEOUT) {
-            reject(new Error('Location request timed out. Please try again.'));
-          } else {
-            reject(new Error('Unable to get your location. Please try again.'));
-          }
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 15000,
-          maximumAge: 60000,
-        }
-      );
-    });
-
-  const runPunch = async (mode: 'IN' | 'OUT') => {
-    try {
-      setActionLoading(mode);
-      setError('');
-      setSuccess('');
-      const coords = await getCoordinates();
-      if (mode === 'IN') {
-        await attendanceAPI.punchIn({
-          employee_id: employeeId,
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-          workType: 'WFH',
-        });
-        setSuccess('Punch in recorded successfully.');
-      } else {
-        await attendanceAPI.punchOut({
-          employee_id: employeeId,
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-        });
-        setSuccess('Punch out recorded successfully.');
-      }
-      await loadAttendance();
-    } catch (err: any) {
-      setError(err?.response?.data?.message || 'Unable to mark attendance.');
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
   const canPunchIn = useMemo(
-    () => Boolean(todayData && !todayData.punch_in_time && todayData.status !== 'LEAVE' && todayData.status !== 'HOLIDAY' && todayData.status !== 'WEEK_OFF'),
+    () => {
+      const status = todayData?.status || 'NOT_MARKED';
+      return !todayData?.punch_in_time && status !== 'LEAVE' && status !== 'HOLIDAY' && status !== 'WEEK_OFF';
+    },
     [todayData]
   );
   const canPunchOut = useMemo(
@@ -248,7 +196,7 @@ const EmployeeAttendancePage: React.FC = () => {
           <div className="flex items-center gap-2">
             <Button
               onClick={() => void beginPunchIn()}
-              disabled={!canPunchIn || actionLoading !== null || punchInSubmitting}
+              disabled={loading || !canPunchIn || punchInSubmitting || punchOutSubmitting}
               className="bg-emerald-600 hover:bg-emerald-700"
             >
               <MapPin className="mr-2 h-4 w-4" />
@@ -256,7 +204,7 @@ const EmployeeAttendancePage: React.FC = () => {
             </Button>
             <Button
               onClick={() => void beginPunchOut()}
-              disabled={!canPunchOut || actionLoading !== null || punchInSubmitting || punchOutSubmitting}
+              disabled={loading || !canPunchOut || punchInSubmitting || punchOutSubmitting}
               className="bg-slate-800 hover:bg-slate-900"
             >
               <MapPin className="mr-2 h-4 w-4" />

@@ -114,7 +114,7 @@ const EmployeePayslipsPage: React.FC = () => {
         rows={rows}
         keyExtractor={(row) => row.id}
         loading={loading}
-        emptyText="No payslips available yet."
+        emptyText="No payslips available yet. payslips will appear once they are generated."
       />
     </div>
   );
