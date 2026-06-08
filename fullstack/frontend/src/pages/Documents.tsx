@@ -22,6 +22,31 @@ interface DocumentResponse {
   message?: string;
 }
 
+const documentTypeOptions = [
+  { value: 'PAN', label: 'PAN Card' },
+  { value: 'AADHAAR', label: 'Aadhaar' },
+  { value: 'BANK_DOC', label: 'Bank Document' },
+  { value: 'CERTIFICATE', label: 'Certificate' },
+  { value: 'OFFER_LETTER', label: 'Offer Letter' },
+  { value: 'APPOINTMENT_LETTER', label: 'Appointment Letter' },
+  { value: 'PROMOTION_LETTER', label: 'Promotion Letter' },
+  { value: 'PAYSLIP', label: 'Payslip' },
+  { value: 'OTHER', label: 'Other' },
+];
+
+const formatUploadDate = (value: string) => {
+  if (!value) return '-';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+
+  return date.toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+};
+
 const DocumentsPage: React.FC = () => {
   const [rows, setRows] = useState<DocumentRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -112,15 +137,11 @@ const DocumentsPage: React.FC = () => {
   };
 
   const columns: DataTableColumn<DocumentRow>[] = [
-    { key: 'name', header: 'Document Name', render: (row) => row.document_name },
+    { key: 'employeeName', header: 'Employee Name', render: (row) => row.employee_name || 'Self' },
+    // { key: 'documentName', header: 'Document Name', render: (row) => row.document_name },
     { key: 'type', header: 'Type', render: (row) => row.document_type },
     ...(isAdminView
       ? [
-          {
-            key: 'employee',
-            header: 'Employee',
-            render: (row: DocumentRow) => row.employee_name || 'Unknown',
-          },
           {
             key: 'uploadedBy',
             header: 'Uploaded By',
@@ -137,7 +158,7 @@ const DocumentsPage: React.FC = () => {
     {
       key: 'uploadedAt',
       header: 'Upload Date',
-      render: (row) => new Date(row.uploaded_at).toLocaleDateString(),
+      render: (row) => formatUploadDate(row.uploaded_at),
     },
     {
       key: 'actions',
@@ -187,18 +208,18 @@ const DocumentsPage: React.FC = () => {
               value={documentName}
               onChange={(event) => setDocumentName(event.target.value)}
               className="h-10 rounded-xl border border-slate-200 px-3 text-sm"
-              placeholder="Document name"
+              placeholder="Employee name"
             />
             <select
               value={documentType}
               onChange={(event) => setDocumentType(event.target.value)}
               className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm"
             >
-              <option value="PAN">PAN</option>
-              <option value="AADHAAR">AADHAAR</option>
-              <option value="BANK_DOC">BANK_DOC</option>
-              <option value="CERTIFICATE">CERTIFICATE</option>
-              <option value="OTHER">OTHER</option>
+              {documentTypeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
             <input
               type="file"
